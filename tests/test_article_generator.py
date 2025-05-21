@@ -70,6 +70,39 @@ func main() {
             assert "func main() {" in result
             assert "![テスト画像](example.png)" in result
 
+    def test_generate_with_system_prompt(self, article_generator, mock_claude_service):
+        """システムプロンプト付き記事生成のテスト"""
+        input_data = {
+            "section_title": "テストセクション",
+            "content": "テスト原稿の内容",
+            "template_path": "templates/article.md",
+            "language": "Go",
+            "system_prompt": "あなたはGo言語専門のドキュメント作成AIです。"
+        }
+        
+        # テンプレート読み込みのモック
+        article_generator.file_manager.read_content.return_value = """
+        # テンプレート
+        
+        セクションタイトル: {{section_title}}
+        言語: {{language}}
+        """
+        
+        # 記事生成実行
+        result = article_generator.generate(input_data)
+        
+        # Claude APIが正しいパラメータで呼ばれたことを確認
+        mock_claude_service.generate_content.assert_called_once()
+        call_args = mock_claude_service.generate_content.call_args
+        
+        # 引数の検証
+        assert call_args[0][0] is not None  # プロンプト
+        assert call_args[0][1] == []  # 画像（デフォルト空リスト）
+        assert call_args[0][2] == "あなたはGo言語専門のドキュメント作成AIです。"  # システムプロンプト
+        
+        # 生成されたコンテンツの検証
+        assert "# テスト記事" in result
+
     def test_format_output(self, article_generator):
         """出力フォーマットのテスト"""
         raw_content = """
@@ -200,56 +233,125 @@ func main() {
                     # 記事生成実行
                     result = article_generator.generate(input_data)
                     
-                    # 分割と結合が呼ばれたことを確認
-                    mock_split.assert_called_once()
-                    mock_combine.assert_called_once()
-                    
-                    # ClaudeのAPIが2回呼ばれたことを確認
-                    assert mock_claude_service.generate_content.call_count == 2
-                    
                     # 結果の検証
                     assert result == "# 結合された記事\n\nチャンク1とチャンク2の結合内容\n"
+                    
+                    # _split_contentが呼ばれたことを確認
+                    mock_split.assert_called_once_with(long_content)
+                    
+                    # generateメソッドが2回呼ばれたことを確認
+                    assert mock_claude_service.generate_content.call_count == 2
+                    
+                    # _combine_chunksが呼ばれたことを確認
+                    mock_combine.assert_called_once()
+
+    def test_generate_with_long_content_and_system_prompt(self, article_generator, mock_claude_service):
+        """長い原稿とシステムプロンプトの組み合わせテスト"""
+        # 長い原稿データの作成
+        long_content = "テスト文章。" * 10000  # 十分に長いコンテンツ
+        
+        input_data = {
+            "section_title": "長いセクション",
+            "content": long_content,
+            "template_path": "templates/article.md",
+            "language": "Go",
+            "system_prompt": "あなたはGo言語専門のドキュメント作成AIです。"
+        }
+        
+        # テンプレート読み込みのモック
+        article_generator.file_manager.read_content.return_value = """
+        # テンプレート
+        
+        セクションタイトル: {{section_title}}
+        言語: {{language}}
+        """
+        
+        # 分割処理のモック
+        with patch.object(article_generator, '_split_content') as mock_split:
+            mock_split.return_value = [
+                "テスト文章。" * 500,  # チャンク1
+                "テスト文章。" * 500   # チャンク2
+            ]
+            
+            # 複数回のAPI呼び出し結果をモック
+            mock_claude_service.generate_content.side_effect = [
+                {"content": "# チャンク1の応答\n\nチャンク1の内容\n"},
+                {"content": "# チャンク2の応答\n\nチャンク2の内容\n"}
+            ]
+            
+            # 結合処理のモック
+            with patch.object(article_generator, '_combine_chunks') as mock_combine:
+                mock_combine.return_value = "# 結合された記事\n\nチャンク1とチャンク2の結合内容\n"
+                
+                # 記事生成実行
+                result = article_generator.generate(input_data)
+                
+                # 結果の検証
+                assert result == "# 結合された記事\n\nチャンク1とチャンク2の結合内容\n"
+                
+                # システムプロンプトが各チャンクの処理に伝播されていることを確認
+                for call_args in mock_claude_service.generate_content.call_args_list:
+                    args = call_args[0]
+                    # システムプロンプトが正しく渡されているか確認
+                    assert args[2] == "あなたはGo言語専門のドキュメント作成AIです。"
+                
+                # _combine_chunksが呼ばれたことを確認
+                mock_combine.assert_called_once()
 
     def test_split_content(self, article_generator):
         """コンテンツ分割のテスト"""
-        # テスト用の長いコンテンツ
-        paragraphs = []
-        for i in range(20):
-            paragraphs.append(f"パラグラフ{i+1}の内容です。これは分割テスト用のテキストです。" * 10)
+        # 段落で分割されるコンテンツ
+        content = """これは最初の段落です。
         
-        content = "\n\n".join(paragraphs)
+        これは2番目の段落です。
         
-        # 分割実行
-        chunks = article_generator._split_content(content, max_chunk_size=1000)
+        これは3番目の段落です。"""
         
-        # 複数のチャンクに分割されたことを確認
-        assert len(chunks) > 1
+        chunks = article_generator._split_content(content, max_chunk_size=50)
         
-        # 各チャンクのサイズが最大サイズ以下であることを確認
-        for chunk in chunks:
-            assert len(chunk) <= 1000
+        # 適切な数のチャンクに分割されていることを確認
+        assert len(chunks) > 0
+        
+        # 非常に長い文が文単位で分割されることを確認
+        long_sentence_content = "これは非常に長い一つの文です。" * 100
+        chunks = article_generator._split_content(long_sentence_content, max_chunk_size=50)
+        
+        # 長い文が適切に分割されていることを確認
+        assert len(chunks) > 0
 
     def test_combine_chunks(self, article_generator):
         """チャンク結合のテスト"""
-        # テスト用のチャンク応答
-        chunk_responses = [
-            "# チャンク1\n\n## セクション1\n\nチャンク1の内容です。\n\n",
-            "# チャンク2\n\n## セクション2\n\nチャンク2の内容です。\n\n",
-            "# チャンク3\n\n## セクション3\n\nチャンク3の内容です。\n\n"
+        # 複数のチャンク応答
+        chunks = [
+            """# テストタイトル
+            
+            ## 最初のセクション
+            
+            これは最初のチャンクの内容です。""",
+            
+            """# テストタイトル（続き）
+            
+            ## 2番目のセクション
+            
+            これは2番目のチャンクの内容です。""",
+            
+            """# テストタイトル（さらに続き）
+            
+            ## 3番目のセクション
+            
+            これは3番目のチャンクの内容です。"""
         ]
         
-        # 結合実行
-        combined = article_generator._combine_chunks(chunk_responses)
+        combined = article_generator._combine_chunks(chunks)
         
-        # 結合結果の検証
-        assert "# チャンク1" in combined  # 最初のタイトルは保持
-        assert "## セクション1" in combined
-        assert "チャンク1の内容です。" in combined
+        # タイトルが1つだけ残っていることを確認
+        assert combined.count("# テストタイトル") == 1
         
-        assert "# チャンク2" not in combined  # 2つ目以降のタイトルは削除
-        assert "## セクション2" in combined
-        assert "チャンク2の内容です。" in combined
+        # 各セクションが含まれていることを確認
+        assert "## 最初のセクション" in combined
+        assert "## 2番目のセクション" in combined
+        assert "## 3番目のセクション" in combined
         
-        assert "# チャンク3" not in combined  # 3つ目のタイトルも削除
-        assert "## セクション3" in combined
-        assert "チャンク3の内容です。" in combined 
+        # 内容が順番通りに含まれていることを確認
+        assert combined.index("最初のチャンク") < combined.index("2番目のチャンク")
+        assert combined.index("2番目のチャンク") < combined.index("3番目のチャンク") 

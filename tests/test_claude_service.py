@@ -63,6 +63,39 @@ class TestClaudeService:
         assert call_args["headers"]["x-api-key"] == "test_api_key"
 
     @patch('services.claude.requests.post')
+    def test_generate_content_with_system_prompt(self, mock_post, claude_service):
+        """システムプロンプト付きコンテンツ生成のテスト"""
+        # モックレスポンス
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "test_response_id",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "システムプロンプトに従った応答"
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+        
+        # テスト実行
+        prompt = "テストプロンプト"
+        system_prompt = "あなたは技術記事専門のAIアシスタントです。"
+        result = claude_service.generate_content(prompt, system_prompt=system_prompt)
+        
+        # 結果の検証
+        assert "content" in result
+        assert "システムプロンプトに従った応答" in result["content"]
+        
+        # API呼び出しの検証
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args[1]
+        assert call_args["json"]["messages"][0]["content"] == "テストプロンプト"
+        assert call_args["json"]["system"] == "あなたは技術記事専門のAIアシスタントです。"
+        assert "system" in call_args["json"]
+
+    @patch('services.claude.requests.post')
     def test_generate_content_with_images(self, mock_post, claude_service):
         """画像付きコンテンツ生成のテスト"""
         # モックレスポンス
@@ -91,6 +124,51 @@ class TestClaudeService:
         # API呼び出しの検証
         mock_post.assert_called_once()
         call_args = mock_post.call_args[1]
+        
+        # メッセージ内に画像が含まれていることを確認
+        messages = call_args["json"]["messages"]
+        assert len(messages) == 1
+        assert isinstance(messages[0]["content"], list)
+        assert len(messages[0]["content"]) == 2  # テキスト + 画像
+        
+        # 画像コンテンツの検証
+        image_content = [item for item in messages[0]["content"] if item.get("type") == "image"]
+        assert len(image_content) == 1
+        assert image_content[0]["source"]["data"] == "test_base64_data"
+
+    @patch('services.claude.requests.post')
+    def test_generate_content_with_images_and_system_prompt(self, mock_post, claude_service):
+        """画像とシステムプロンプト付きコンテンツ生成のテスト"""
+        # モックレスポンス
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "test_response_id",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "画像分析: テスト画像です。"
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+        
+        # テスト実行
+        prompt = "この画像について説明してください"
+        images = ["data:image/jpeg;base64,test_base64_data"]
+        system_prompt = "あなたは画像分析専門のAIアシスタントです。"
+        result = claude_service.generate_content(prompt, images, system_prompt)
+        
+        # 結果の検証
+        assert "content" in result
+        assert "画像分析" in result["content"]
+        
+        # API呼び出しの検証
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args[1]
+        
+        # システムプロンプトが含まれていることを確認
+        assert call_args["json"]["system"] == "あなたは画像分析専門のAIアシスタントです。"
         
         # メッセージ内に画像が含まれていることを確認
         messages = call_args["json"]["messages"]

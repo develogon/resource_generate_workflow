@@ -54,7 +54,8 @@ class ClaudeService(APIClient):
     def generate_content(
         self, 
         prompt: str, 
-        images: Optional[List[str]] = None
+        images: Optional[List[str]] = None,
+        system_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Claude APIを使用してコンテンツを生成する。
@@ -63,6 +64,7 @@ class ClaudeService(APIClient):
             prompt (str): 生成プロンプト
             images (List[str], optional): Base64エンコードされた画像データのリスト
                 "data:image/jpeg;base64,..."または"data:image/png;base64,..."形式
+            system_prompt (str, optional): システムプロンプト
         
         Returns:
             Dict[str, Any]: APIレスポンス
@@ -103,13 +105,18 @@ class ClaudeService(APIClient):
             # テキストのみのメッセージ
             messages = [{"role": "user", "content": prompt}]
         
-        # APIリクエストボディ
+        # システムプロンプトが提供されている場合は追加
         request_body = {
             "model": self.model,
-            "messages": messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature
         }
+        
+        # システムプロンプトの追加
+        if system_prompt:
+            request_body["system"] = system_prompt
+        
+        request_body["messages"] = messages
         
         # リトライロジック
         for attempt in range(self.retry_count):

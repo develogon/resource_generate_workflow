@@ -46,6 +46,36 @@ class TestContentGenerator:
             assert "これはサンプル概要です。" in result
             assert "言語: Go" in result
 
+    def test_generate_with_system_prompt(self, content_generator, mock_claude_service):
+        """システムプロンプト付きコンテンツ生成のテスト"""
+        # テスト用入力データ
+        input_data = {
+            "template_path": "templates/test_template.md",
+            "context": SAMPLE_CONTEXT,
+            "system_prompt": "あなたは技術記事専門のAIアシスタントです。"
+        }
+        
+        # テンプレート読み込みのモック
+        content_generator.file_manager.read_content.return_value = SAMPLE_TEMPLATE
+        
+        # generate実行
+        result = content_generator.generate(input_data)
+        
+        # Claude APIが正しいパラメータで呼ばれたことを確認
+        mock_claude_service.generate_content.assert_called_once()
+        call_args = mock_claude_service.generate_content.call_args
+        
+        # 引数の検証
+        assert call_args[0][0] is not None  # プロンプト
+        assert call_args[0][1] == []  # 画像（デフォルト空リスト）
+        assert call_args[0][2] == "あなたは技術記事専門のAIアシスタントです。"  # システムプロンプト
+        
+        # 結果の検証
+        assert "# サンプルタイトル" in result
+        assert "## 概要" in result
+        assert "これはサンプル概要です。" in result
+        assert "言語: Go" in result
+
     def test_format_output(self, content_generator):
         """出力フォーマットのテスト"""
         raw_content = SAMPLE_GENERATED_CONTENT

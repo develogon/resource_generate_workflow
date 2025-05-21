@@ -41,6 +41,7 @@ class ArticleGenerator(ContentGenerator):
                 - template_path: テンプレートファイルのパス
                 - images: (optional) プロンプトに含める画像データのリスト
                 - language: (optional) 対象言語
+                - system_prompt: (optional) システムプロンプト
         
         Returns:
             str: 生成された記事
@@ -64,6 +65,9 @@ class ArticleGenerator(ContentGenerator):
                 chunk_data["content"] = chunk
                 chunk_data["chunk_index"] = i
                 chunk_data["total_chunks"] = len(chunks)
+                
+                # システムプロンプトを各チャンクに伝播
+                # 既に入力データにsystem_promptが存在する場合はそのまま継承される
                 
                 # 通常の生成処理でチャンクを処理
                 chunk_response = super().generate(chunk_data)

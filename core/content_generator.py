@@ -45,6 +45,7 @@ class ContentGenerator:
                 - template_path: テンプレートファイルのパス
                 - context: テンプレート変数の辞書
                 - images: (optional) プロンプトに含める画像データのリスト
+                - system_prompt: (optional) システムプロンプト
 
         Returns:
             str: 生成されたコンテンツ
@@ -63,8 +64,11 @@ class ContentGenerator:
             # 画像データの取得
             images = input_data.get("images", [])
             
+            # システムプロンプトの取得
+            system_prompt = input_data.get("system_prompt")
+            
             # Claude APIでコンテンツ生成
-            response = self.claude_service.generate_content(prompt, images)
+            response = self.claude_service.generate_content(prompt, images, system_prompt)
             
             # 生成されたコンテンツを取得
             raw_content = response.get("content", "")
