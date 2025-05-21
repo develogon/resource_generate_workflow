@@ -1,0 +1,350 @@
+title: "テストタイトル"
+chapters:
+  - id: "01"
+    title: "第1章 はじめに"
+    sections:
+      - id: "01"
+        title: "配列"
+
+        # セクション情報
+        learning_objectives:
+          - "Goの配列の基本的な宣言方法を理解する"
+          - "配列リテラルと要素アクセスの方法を習得する"
+          - "Goで配列があまり使われない理由を把握する"
+
+        # パラグラフ定義
+        paragraphs:
+          - type: "introduction_with_foreshadowing"
+            order: 1
+            content_focus: "配列の存在と使用頻度の少なさへの言及"
+            original_text: |
+              Go言語にも配列 (array)がありますが、配列が直接使われることは多くはありません。その理由は後回しにして、まずは配列の宣言方法を見ましょう。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  style: "introduction"
+                  key_points:
+                    - "配列の存在確認"
+                    - "使用頻度の低さ"
+                    - "学習の進め方"
+                  preserve_elements:
+                    - "その理由は後回しにして"という特徴的な表現
+                    - 配列の重要度についての著者の見解
+              
+              - type: "image"
+                order: 2
+                config:
+                  type: "concept_overview"
+                  description: "Goにおける配列の位置づけ"
+                  slide_structure:
+                    - "配列の存在"
+                    - "使用頻度は低い"
+                    - "理由は後で説明"
+                    - "まずは基本から"
+
+          - type: "basic_declaration"
+            order: 2
+            content_focus: "基本的な配列宣言"
+            original_text: |
+              var x [3]int
+              この宣言で3つの整数をもつ配列が生成されます。値が指定されていないので、すべての要素は値としてintのゼロ値（すなわち0）をもちます。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "配列宣言の構文説明"
+                  content: "大きさと型の指定方法"
+                  preserve_elements:
+                    - "この宣言で..."という説明の始まり方
+              
+              - type: "code"
+                order: 2
+                config:
+                  pattern: "variable_declaration"
+                  language: "go"
+                  examples:
+                    - content: "var x [3]int"
+                      description: "3つの整数を持つ配列の宣言"
+                      annotations:
+                        - line: 1
+                          note: "サイズ3、int型、すべて0で初期化"
+                  comment_level: "basic"
+              
+              - type: "explanation"
+                order: 3
+                config:
+                  focus: "初期化の動作"
+                  content: "ゼロ値による自動初期化"
+                  preserve_elements:
+                    - ゼロ値の概念とその具体例（0）
+
+          - type: "array_literal"
+            order: 3
+            content_focus: "配列リテラルによる初期化"
+            original_text: |
+              値を指定する場合は、次のように「配列リテラル」を用います。
+              
+              var x = [3]int{10, 20, 30}
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "配列リテラルの概念"
+                  content: "値を直接指定する方法"
+                  preserve_elements:
+                    - "配列リテラル"という用語
+              
+              - type: "code"
+                order: 2
+                config:
+                  pattern: "literal_initialization"
+                  language: "go"
+                  examples:
+                    - content: "var x = [3]int{10, 20, 30}"
+                      description: "配列リテラルによる初期化"
+                  comment_level: "basic"
+                  preserve_elements:
+                    - 具体的な値の例（10, 20, 30）
+
+          - type: "sparse_array_initialization"
+            order: 4
+            content_focus: "インデックス指定による部分初期化"
+            original_text: |
+              途中に「空き」がある配列の値を指定したい場合は、配列のインデックス（添そえ字じ）とその値を次のように指定します。
+              
+              var x = [12]int{1, 5: 4, 6, 10: 100, 15}
+              上の宣言により、次の12個の要素をもつ配列が生成されます。
+              
+              [1, 0, 0, 0, 0, 4, 6, 0, 0, 0, 100, 15]
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "スパース初期化の用途"
+                  content: "途中に空きがある場合の対処"
+                  preserve_elements:
+                    - "途中に「空き」がある"という表現
+                    - "添そえ字じ"のルビ付き表記
+              
+              - type: "code"
+                order: 2
+                config:
+                  pattern: "sparse_initialization"
+                  language: "go"
+                  examples:
+                    - content: "var x = [12]int{1, 5: 4, 6, 10: 100, 15}"
+                      description: "インデックス指定による初期化"
+                  comment_level: "detailed"
+                  focus_areas:
+                    - "インデックス:値の記法"
+              
+              - type: "code"
+                order: 3
+                config:
+                  pattern: "output_result"
+                  language: "text"
+                  examples:
+                    - content: "[1, 0, 0, 0, 0, 4, 6, 0, 0, 0, 100, 15]"
+                      description: "生成される配列"
+                      type: "output"
+                  preserve_elements:
+                    - 結果配列の正確な表示
+              
+              - type: "explanation"
+                order: 4
+                config:
+                  focus: "動作メカニズム"
+                  content: "インデックス指定とゼロ値埋め"
+
+          - type: "multidimensional_arrays"
+            order: 5
+            content_focus: "多次元配列の表現方法"
+            original_text: |
+              Go言語には1次元の配列しかありませんが、次のようにすることで多次元配列のように使うことができます。
+              
+              var x [2][3]int
+              これによりxは長さ2の配列になりますが、その型は長さ3の整数配列ということになります。単純に多次元配列をサポートしている言語に比べると「ややこしい」と感じるかもしれませんが、ともかくGoではこのように表現します。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "制限事項"
+                  content: "1次元のみという制約"
+                  preserve_elements:
+                    - "1次元の配列しかありません"という限定
+              
+              - type: "image"
+                order: 2
+                config:
+                  type: "array_structure_diagram"
+                  description: "Goの多次元配列の構造"
+                  slide_structure:
+                    - "1次元配列の制限"
+                    - "[2][3]intの内部構造"
+                    - "配列の配列という考え方"
+                    - "他言語との比較"
+              
+              - type: "code"
+                order: 3
+                config:
+                  pattern: "multidimensional_declaration"
+                  language: "go"
+                  examples:
+                    - content: "var x [2][3]int"
+                      description: "2次元配列風の宣言"
+                      annotations:
+                        - line: 1
+                          note: "長さ2の配列、要素は長さ3のint配列"
+                  comment_level: "detailed"
+              
+              - type: "explanation"
+                order: 4
+                config:
+                  focus: "回避方法の理解"
+                  content: "配列の配列という概念"
+                  preserve_elements:
+                    - "ややこしい」と感じるかもしれませんが"という共感的表現
+                    - "ともかくGoではこのように表現します"という著者の断定
+
+          - type: "array_limitations_explanation"
+            order: 6
+            content_focus: "配列の制限事項と型システム"
+            original_text: |
+              この章の冒頭でGoでは「配列が直接使われることは多くはない」と書きました。その理由は「配列にはかなりの制限がある」からです。Goでは配列の大きさを配列の「型」の一部としてみなしているのです。つまり、[3]intと宣言した配列と、[4]intと宣言した配列では型が異なるのです。これはまた配列の大きさを指定するのに変数を使えないことを意味します。配列の型は（実行時にではなく）コンパイル時に決定できなければなりません。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "問題の所在"
+                  content: "使用頻度が低い理由"
+                  preserve_elements:
+                    - 冒頭への言及と回帰
+                    - "かなりの制限がある"という評価
+              
+              - type: "image"
+                order: 2
+                config:
+                  type: "type_system_diagram"
+                  description: "Goの配列型システム"
+                  slide_structure:
+                    - "配列サイズと型の関係"
+                    - "[3]int ≠ [4]int"
+                    - "コンパイル時型決定"
+                    - "変数サイズ不可の理由"
+              
+              - type: "explanation"
+                order: 3
+                config:
+                  focus: "型システムの制約"
+                  content: "サイズが型の一部であることの影響"
+                  preserve_elements:
+                    - 型の一部としての大きさという概念
+                    - コンパイル時決定の重要性
+
+          - type: "bounds_checking"
+            order: 7
+            content_focus: "配列の境界チェックとパニック"
+            original_text: |
+              最後の要素を超えるインデックスを指定したり、インデックスとして負の値を指定したりはできません。定数あるいはリテラルでこのような指定をした場合、コンパイル時のエラーになります。インデックスを変数で指定した場合にはコンパイルはされますが、値が範囲外になると実行に失敗し、「パニック」となります（「8.8　パニックとリカバー」参照）。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "安全性機能"
+                  content: "配列アクセスの制限とエラーハンドリング"
+                  preserve_elements:
+                    - コンパイル時エラーと実行時パニックの区別
+                    - "8.8　パニックとリカバー"への参照
+                    - 「パニック」の概念
+              
+              - type: "image"
+                order: 2
+                config:
+                  type: "bounds_checking_diagram"
+                  description: "Goの配列境界チェック"
+                  slide_structure:
+                    - "有効範囲[0, len-1]"
+                    - "定数アクセス → コンパイル時エラー"
+                    - "変数アクセス → 実行時パニック"
+                    - "安全性の保証"
+              
+              - type: "code"
+                order: 3
+                config:
+                  pattern: "error_examples"
+                  language: "go"
+                  examples:
+                    - content: |
+                        var x [3]int
+                        x[5] = 10  // コンパイル時エラー
+                      description: "定数による範囲外アクセス"
+                      type: "compile_error"
+                    - content: |
+                        var x [3]int
+                        i := 5
+                        x[i] = 10  // 実行時パニック
+                      description: "変数による範囲外アクセス"
+                      type: "runtime_panic"
+                  comment_level: "detailed"
+
+          - type: "design_philosophy"
+            order: 8
+            content_focus: "配列存在の理由とスライスとの関係"
+            original_text: |
+              なぜこのような制約が課せられているのでしょうか。配列は、Goでよく使われる「スライス」の「後方支援」のために、存在しているのです。
+            
+            content_sequence:
+              - type: "explanation"
+                order: 1
+                config:
+                  focus: "Goの設計思想"
+                  content: "制約の理由と全体設計における位置づけ"
+                  preserve_elements:
+                    - 修辞疑問文の使用
+                    - "後方支援"という比喩的表現
+                    - スライスへの予告
+              
+              - type: "image"
+                order: 2
+                config:
+                  type: "relationship_diagram"
+                  description: "配列とスライスの関係"
+                  slide_structure:
+                    - "配列の位置づけ"
+                    - "スライスの「後方支援」"
+                    - "Goのデザイン思想"
+                    - "次章への導入"
+
+        # コンテンツタイプの標準設定
+        content_types:
+          explanation:
+            required_fields: ["focus", "content"]
+            optional_fields: ["preserve_elements", "style", "key_points"]
+            
+          code:
+            required_fields: ["pattern", "language", "examples"]
+            optional_fields: ["comment_level", "focus_areas", "preserve_elements", "annotations"]
+            
+          image:
+            required_fields: ["type", "description"]
+            optional_fields: ["slide_structure", "references_figure"]
+
+        # AI生成時の指示テンプレート
+        ai_instructions:
+          generation_prompt: |
+            content_sequenceに従って、順序通りにコンテンツを生成してください。
+            
+            各要素のconfigを参照し、以下を厳密に守ってください：
+            1. preserve_elements に記載された要素は絶対に変更しない
+            2. original_text の内容を100%保持する
+            3. config の指示に従って最適化する
+            
+            {sequence_details}
