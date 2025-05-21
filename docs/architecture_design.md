@@ -55,6 +55,7 @@ resource_generate_workflow/
 │   ├── json_script.py          # JSONスクリプト生成
 │   ├── tweets.py               # ツイート生成
 │   ├── description.py          # 概要生成
+│   ├── structure.py            # セクション構造YAML生成
 │   └── image/                  # 画像処理・生成
 │       ├── processor.py        # 画像処理基底クラス
 │       ├── svg_processor.py    # SVG画像の処理
@@ -68,7 +69,8 @@ resource_generate_workflow/
 │       ├── script.md
 │       ├── script_json.md
 │       ├── tweets.md
-│       └── description.md
+│       ├── description.md
+│       └── structure.md        # セクション構造生成用プロンプト
 │   └── description_template.md          # 概要テンプレート
 │
 ├── utils/
@@ -208,6 +210,12 @@ resource_generate_workflow/
 - ツイート集（tweets.csv）の生成ロジック
 - CSVフォーマット処理
 - ツイート長の検証と調整
+
+#### structure.py
+- セクション構造（section_structure.yaml）の生成ロジック
+- YAMLフォーマット処理と検証
+- パラグラフ構造と学習目標の定義
+- コンテンツシーケンスの設計
 
 #### image/processor.py
 - 画像処理の基底クラス

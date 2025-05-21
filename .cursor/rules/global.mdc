@@ -137,61 +137,7 @@ alwaysApply: true
 
 # ディレクトリ構成
 
-```
-resource_generate_workflow/
-├── main.py                     # エントリーポイント
-├── requirements.txt            # 依存パッケージ
-│
-├── config/
-│   ├── settings.py             # 全体設定
-│   ├── credentials.py          # API認証情報
-│
-├── core/
-│   ├── parser.py               # Markdown・YAML解析の抽象ロジック
-│   ├── processor.py            # コンテンツ処理の抽象基底クラス
-│   ├── file_manager.py         # ファイル操作
-│   ├── content_generator.py    # コンテンツ生成の抽象基底クラス
-│   └── state_manager.py        # 処理状態の管理
-│
-├── services/                   # 外部サービス連携の抽象ロジック
-│   ├── client.py               # APIクライアント基底クラス
-│   ├── claude.py               # Claude API実装
-│   ├── github.py               # GitHub API実装
-│   ├── storage.py              # S3ストレージ実装
-│   └── notifier.py             # Slack通知実装
-│
-├── generators/                 # 具体的なコンテンツ生成器
-│   ├── article.py              # 記事生成
-│   ├── script.py               # 台本生成
-│   ├── json_script.py          # JSONスクリプト生成
-│   ├── tweets.py               # ツイート生成
-│   ├── description.py          # 概要生成
-│   └── image/                  # 画像処理・生成
-│       ├── processor.py        # 画像処理基底クラス
-│       ├── svg_processor.py    # SVG画像の処理
-│       ├── mermaid_processor.py # Mermaid図の処理
-│       └── drawio_processor.py # Draw.io XML図の処理
-│
-├── templates/                  # プロンプトテンプレート
-│   └── prompts/
-│       ├── section_structure.yml
-│       ├── article.md
-│       ├── script.md
-│       ├── script_json.md
-│       ├── tweets.md
-│       └── description.md
-│   └── description_template.md          # 概要テンプレート
-│
-├── utils/
-│   ├── logging.py              # ロギング
-│   ├── helpers.py              # 汎用ヘルパー関数
-│   ├── exceptions.py           # カスタム例外クラス
-│   ├── retry.py                # リトライメカニズム
-│   └── parallel.py             # 並列処理ユーティリティ
-│
-└── tests/                      # テスト
-    └── fixtures/               # テスト用データ
-```
+[architecture_design.md](mdc:docs/architecture_design.md) を参照すること
 
 ## 設計パターン適用ガイドライン
 

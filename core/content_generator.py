@@ -176,5 +176,8 @@ class ContentGenerator:
         elif generator_type == "description":
             from generators.description import DescriptionGenerator
             return DescriptionGenerator(**services)
+        elif generator_type == "structure":
+            from generators.structure import StructureGenerator
+            return StructureGenerator(**services)
         else:
             raise ValueError(f"不明な生成器タイプです: {generator_type}") 
