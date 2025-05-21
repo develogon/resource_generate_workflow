@@ -115,7 +115,7 @@ chapters:
                     - "テストポイント1"
                     - "テストポイント2"
                   preserve_elements:
-                    - "このテキスト"という表現
+                    - '"このテキスト"という表現'
               - type: "image"
                 order: 2
                 config:

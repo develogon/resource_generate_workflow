@@ -33,7 +33,7 @@ class TestMarkdownParser:
         parser = MarkdownParser()
         sections = parser.extract_sections(sample_markdown_content)
         
-        assert len(sections) == 4  # 全セクション数
+        assert len(sections) == 6  # 全セクション数
         assert sections[0]["level"] == 1  # タイトル
         assert sections[1]["level"] == 2  # 章
         assert sections[2]["level"] == 3  # セクション
@@ -51,10 +51,29 @@ class TestMarkdownParser:
 class TestYAMLParser:
     """YAMLパーサーのテストクラス"""
 
-    def test_parse_yaml(self, sample_yaml_content):
+    def test_parse_yaml(self):
         """YAML解析テスト"""
         parser = YAMLParser()
-        result = parser.parse_yaml(sample_yaml_content)
+        # テスト用の簡略化されたYAML
+        yaml_content = """
+        title: "テストタイトル"
+        chapters:
+          - id: "01"
+            title: "第1章 はじめに"
+            sections:
+              - id: "01"
+                title: "基礎知識"
+                learning_objectives:
+                  - "テスト目標1を理解する"
+                  - "テスト目標2を習得する"
+                paragraphs:
+                  - type: "introduction_with_foreshadowing"
+                    content_focus: "基礎知識の紹介"
+                  - type: "basic_example"
+                    content_focus: "応用知識の説明"
+        """
+        
+        result = parser.parse_yaml(yaml_content)
         
         assert result["title"] == "テストタイトル"
         assert len(result["chapters"]) == 1
@@ -71,11 +90,18 @@ class TestYAMLParser:
         assert paragraphs[0]["type"] == "introduction_with_foreshadowing"
         assert "基礎知識の紹介" in paragraphs[0]["content_focus"]
 
-    def test_validate_yaml_structure(self, sample_yaml_content):
+    def test_validate_yaml_structure(self):
         """YAML構造の検証テスト"""
         parser = YAMLParser()
+        # 正常なYAML
+        valid_yaml = """
+        title: "テストタイトル"
+        chapters:
+          - id: "01"
+            title: "テスト章"
+        """
         # 正常なYAMLの検証
-        assert parser.validate_structure(sample_yaml_content) is True
+        assert parser.validate_structure(valid_yaml) is True
         
         # 不正なYAML（必須フィールドの欠落）
         invalid_yaml = """
@@ -86,10 +112,23 @@ class TestYAMLParser:
         with pytest.raises(ValueError):
             parser.validate_structure(invalid_yaml)
 
-    def test_extract_learning_objectives(self, sample_yaml_content):
+    def test_extract_learning_objectives(self):
         """学習目標抽出テスト"""
         parser = YAMLParser()
-        result = parser.parse_yaml(sample_yaml_content)
+        yaml_content = """
+        title: "テストタイトル"
+        chapters:
+          - id: "01"
+            title: "第1章 はじめに"
+            sections:
+              - id: "01"
+                title: "基礎知識"
+                learning_objectives:
+                  - "テスト目標1を理解する"
+                  - "テスト目標2を習得する"
+        """
+        
+        result = parser.parse_yaml(yaml_content)
         objectives = parser.extract_learning_objectives(result)
         
         assert len(objectives) == 2

@@ -62,8 +62,12 @@ class TestFileManager:
         """画像エンコードのテスト"""
         file_manager = FileManager()
         
-        # Base64エンコードのモック
-        with patch('base64.b64encode') as mock_b64encode:
+        # Base64エンコードとos.path.existsのモック
+        with patch('base64.b64encode') as mock_b64encode, \
+             patch('os.path.exists') as mock_exists:
+            
+            # 画像ファイルが存在すると設定
+            mock_exists.return_value = True
             mock_b64encode.return_value = b'encoded_image_data'
             
             content = """# テスト
