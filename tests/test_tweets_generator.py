@@ -114,21 +114,4 @@ class TestTweetsGenerator:
         
         # 境界値テスト（281文字）
         over_edge_tweet = "あ" * 281
-        assert tweets_generator.check_tweet_length(over_edge_tweet) is False
-
-    def test_format_hashtags(self, tweets_generator):
-        """ハッシュタグフォーマットのテスト"""
-        # 複数のハッシュタグ
-        hashtags = ["Go", "golang", "programming"]
-        formatted = tweets_generator.format_hashtags(hashtags)
-        assert formatted == "#Go #golang #programming"
-        
-        # 空のハッシュタグリスト
-        empty_hashtags = []
-        formatted_empty = tweets_generator.format_hashtags(empty_hashtags)
-        assert formatted_empty == ""
-        
-        # 特殊文字を含むハッシュタグ
-        special_hashtags = ["Go-lang", "test/programming", "a b c"]
-        formatted_special = tweets_generator.format_hashtags(special_hashtags)
-        assert formatted_special == "#Golang #testprogramming #abc" 
+        assert tweets_generator.check_tweet_length(over_edge_tweet) is False 

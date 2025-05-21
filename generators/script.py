@@ -27,12 +27,8 @@ class ScriptFormatConfig:
         self.quote_format = quote_format or "「{}」"
         
         # 正規表現パターンの事前コンパイル
-        self._speaker_regex = self._compile_speaker_regex()
-        
-    def _compile_speaker_regex(self) -> Pattern:
-        """話者パターンの正規表現をコンパイルする"""
         speaker_pattern = "|".join(map(re.escape, self.speaker_patterns))
-        return re.compile(f"^({speaker_pattern})\\s*[:：]\\s*", re.MULTILINE)
+        self._speaker_regex = re.compile(f"^({speaker_pattern})\\s*[:：]\\s*", re.MULTILINE)
 
 
 from core.content_generator import ContentGenerator

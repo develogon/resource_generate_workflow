@@ -213,29 +213,4 @@ class TweetsGenerator(ContentGenerator):
         Returns:
             bool: 長さが制限内の場合はTrue、そうでない場合はFalse
         """
-        return len(tweet_text) <= self.max_length
-    
-    def format_hashtags(self, hashtags: List[str]) -> str:
-        """
-        ハッシュタグをフォーマットする。
-        
-        Args:
-            hashtags (List[str]): ハッシュタグのリスト
-        
-        Returns:
-            str: フォーマット済みのハッシュタグ文字列
-        """
-        if not hashtags:
-            return ""
-        
-        formatted_hashtags = []
-        for tag in hashtags:
-            # 特殊文字と空白を削除
-            cleaned_tag = re.sub(r'[^\w\d]', '', tag)
-            # 空白があれば単語の先頭を大文字にしてキャメルケースに
-            cleaned_tag = re.sub(r'\s+', '', cleaned_tag)
-            
-            if cleaned_tag:
-                formatted_hashtags.append(f"#{cleaned_tag}")
-        
-        return " ".join(formatted_hashtags) 
+        return len(tweet_text) <= self.max_length 
