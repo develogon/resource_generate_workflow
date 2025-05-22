@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-# テスト対象のモジュールをインポート（まだ実装されていない場合はコメントアウト）
-# from app.generators.article import ArticleGenerator
+# テスト対象のモジュールをインポート
+from app.generators.article import ArticleGenerator
 
 class TestArticleGenerator:
     """記事ジェネレータのテストクラス"""
@@ -10,56 +10,11 @@ class TestArticleGenerator:
     @pytest.fixture
     def article_generator(self):
         """テスト用の記事ジェネレータインスタンスを作成"""
-        # コメントアウトされているコードは、実際のクラスが実装された後に有効化する
-        # return ArticleGenerator()
-        
-        # モックインスタンスを返す（クラスが実装されるまでの一時的な対応）
-        mock_generator = MagicMock()
-        
-        # prepare_prompt メソッドが呼ばれたときに実行される関数
-        mock_generator.prepare_prompt.side_effect = lambda structure, **kwargs: f"""
-# 記事作成
-
-以下の構造に基づいて、詳細な記事を生成してください。
-
-## 記事タイトル
-{structure.get('title', 'タイトルなし')}
-
-## セクション
-{', '.join([section.get('title', 'セクションタイトルなし') for section in structure.get('sections', [])])}
-
-## スタイル
-技術解説記事、初心者向け
-"""
-        
-        # process_response メソッドが呼ばれたときに実行される関数
-        mock_generator.process_response.side_effect = lambda response: """# 生成された記事タイトル
-
-## はじめに
-これは生成された記事の導入部分です。
-
-## 主要な内容
-これは記事の主要な内容部分です。
-
-## まとめ
-これは記事のまとめ部分です。
-"""
-        
-        return mock_generator
+        return ArticleGenerator()
     
     def test_generate_article(self, article_generator, sample_structure_data):
         """記事生成のテスト"""
-        # このテストは、実際のクラスが実装された後に一部を有効化する
-        # generate_article メソッドの呼び出し
-        article_generator.generate_article.return_value = """# メインタイトル
-
-## セクション1
-これはセクション1の内容です。
-
-## セクション2
-これはセクション2の内容です。
-"""
-        
+        # 実際のクラスを使用した記事生成のテスト
         result = article_generator.generate_article(sample_structure_data, "sample.md")
         
         # 結果が正しいことを確認

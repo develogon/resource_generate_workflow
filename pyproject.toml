@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resource-generate-workflow"
+version = "0.1.0"
+description = "AIを活用したリソース生成ワークフロー"
+readme = "README.md"
+authors = [
+    {name = "Develogon", email = "example@example.com"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "anthropic",
+    "pygithub",
+    "boto3",
+    "slack-sdk",
+    "cairosvg",
+    "pillow",
+    "pyyaml",
+    "httpx",
+    "rich",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio",
+    "black",
+    "flake8",
+    "mypy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

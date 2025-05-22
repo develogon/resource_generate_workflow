@@ -35,6 +35,8 @@ class TestS3Client:
         # check_if_exists メソッドが呼ばれたときに実行される関数
         def mock_check_if_exists(key):
             # テスト用に特定のキーのみ存在すると判定
+            if "not_exists" in key:
+                return False
             if "exists" in key:
                 return True
             return False
@@ -43,6 +45,8 @@ class TestS3Client:
         
         # delete_file メソッドが呼ばれたときに実行される関数
         def mock_delete_file(key):
+            if "not_exists" in key:
+                return False
             if "exists" in key:
                 return True
             return False

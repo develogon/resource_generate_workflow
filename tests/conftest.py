@@ -109,71 +109,23 @@ def sample_task_data():
 # サンプル構造化データ
 @pytest.fixture
 def sample_structure_data():
+    """テスト用のサンプル構造データを提供する"""
     return {
-        "title": "1.1 プログラミングの基本概念",
-        "learning_objectives": [
-            "変数とデータ型の基本を理解する",
-            "条件分岐の仕組みと使い方を習得する",
-            "ループ構造による繰り返し処理を理解する",
-            "関数の定義と呼び出し方を習得する"
-        ],
-        "paragraphs": [
+        "title": "Pythonによる自動化入門",
+        "sections": [
             {
-                "type": "heading",
-                "content": "プログラミングの基本概念について",
-                "level": 2,
-                "metadata": {
-                    "order": 1,
-                    "purpose": "introduction",
-                    "original_text": "プログラミングを学ぶ上で最初に理解すべき基本的な概念について説明します。これらの概念は全てのプログラミング言語に共通する重要な基礎です。"
-                }
+                "title": "Pythonの基本",
+                "content": "Pythonの基本的な構文と概念について説明します。"
             },
             {
-                "type": "text",
-                "content": "プログラミングを学ぶ上で最初に理解すべき基本的な概念について説明します。これらの概念は全てのプログラミング言語に共通する重要な基礎です。",
-                "metadata": {
-                    "order": 2,
-                    "purpose": "explanation"
-                }
+                "title": "ファイル操作",
+                "content": "Pythonでのファイル読み書きと操作方法について説明します。"
             },
             {
-                "type": "heading",
-                "content": "変数とデータ型",
-                "level": 3,
-                "metadata": {
-                    "order": 3,
-                    "purpose": "section_title"
-                }
-            },
-            {
-                "type": "text",
-                "content": "変数はプログラミングの基本的な要素で、データを一時的に格納するための名前付きのメモリ領域です。",
-                "metadata": {
-                    "order": 4,
-                    "purpose": "explanation"
-                }
-            },
-            {
-                "type": "list",
-                "items": [
-                    "整数型: 1, 2, 3などの整数値を格納",
-                    "浮動小数点型: 3.14, 0.5などの小数値を格納",
-                    "文字列型: 「こんにちは」などのテキストを格納",
-                    "ブール型: TrueまたはFalseの真偽値を格納"
-                ],
-                "metadata": {
-                    "order": 5,
-                    "purpose": "enumeration"
-                }
-            },
-            {
-                "type": "code",
-                "language": "python",
-                "content": "# Pythonでの変数の例\nage = 25               # 整数型\nheight = 175.5         # 浮動小数点型\nname = \"山田太郎\"      # 文字列型\nis_student = True      # ブール型",
-                "metadata": {
-                    "order": 6,
-                    "purpose": "example"
-                }
+                "title": "自動化スクリプト作成",
+                "content": "実用的な自動化スクリプトの作成方法を解説します。"
             }
-        ]
+        ],
+        "style": "技術解説記事",
+        "target_audience": "初心者向け"
     } 
