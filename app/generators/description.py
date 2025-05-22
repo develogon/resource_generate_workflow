@@ -70,6 +70,9 @@ class DescriptionGenerator(BaseGenerator):
 
         Returns:
             str: 生成された説明文
+            
+        Raises:
+            ValueError: コンテンツが空の場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -79,17 +82,8 @@ class DescriptionGenerator(BaseGenerator):
         description_text = self.client.extract_content(response)
         
         if not description_text:
-            return """# 記事タイトル - 説明文
-
-本コンテンツでは、重要なトピックについて詳しく解説しています。初心者から中級者まで、幅広い読者に役立つ情報が満載です。
-
-主な内容として、基本概念の説明から実践的な応用例まで、体系的に学ぶことができます。特に注目すべきポイントは以下の通りです：
-- わかりやすい例を用いた解説
-- 実践で役立つ具体的な手法
-- 応用力を高めるための発展的な内容
-
-このコンテンツを学ぶことで、単なる知識だけでなく、実際の現場で活用できるスキルを身につけることができます。
-"""
+            self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
         
         return description_text
 

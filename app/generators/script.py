@@ -63,6 +63,9 @@ class ScriptGenerator(BaseGenerator):
 
         Returns:
             str: 生成された台本のMarkdown
+            
+        Raises:
+            ValueError: コンテンツが空の場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -72,22 +75,8 @@ class ScriptGenerator(BaseGenerator):
         script_text = self.client.extract_content(response)
         
         if not script_text:
-            return """# 台本：タイトル
-
-## 登場人物
-- 司会者（MC）：番組の進行役
-- 専門家（EXPERT）：技術の専門家
-
-## 台本
-
-MC: みなさんこんにちは！今回のテーマは「タイトル」です。
-
-EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
-
-MC: まず基本的なことから教えてください。
-
-EXPERT: はい、まず最初に重要なポイントは...
-"""
+            self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
         
         return script_text
 

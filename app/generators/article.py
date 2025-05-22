@@ -65,6 +65,9 @@ class ArticleGenerator(BaseGenerator):
 
         Returns:
             str: 生成された記事のMarkdown
+            
+        Raises:
+            ValueError: コンテンツが空の場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -74,17 +77,8 @@ class ArticleGenerator(BaseGenerator):
         article_text = self.client.extract_content(response)
         
         if not article_text:
-            return """# 生成された記事タイトル
-
-## はじめに
-これは生成された記事の導入部分です。
-
-## 主要な内容
-これは記事の主要な内容部分です。
-
-## まとめ
-これは記事のまとめ部分です。
-"""
+            self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
         
         return article_text
 

@@ -112,7 +112,15 @@ class ThumbnailGenerator(BaseGenerator):
 
         Returns:
             bytes: 処理された画像データ
+            
+        Raises:
+            ValueError: 画像データが空の場合
         """
+        # 画像データが空でないことを確認
+        if not response or len(response) == 0:
+            self.logger.error("API応答から画像データを取得できませんでした")
+            raise ValueError("API応答から画像データを取得できませんでした")
+            
         # この実装では特に処理は行わず、そのまま返す
         # 将来的には画像処理（リサイズ、フィルタ適用など）を追加する可能性がある
         return response

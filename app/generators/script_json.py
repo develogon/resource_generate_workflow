@@ -61,6 +61,9 @@ class ScriptJsonGenerator(BaseGenerator):
 
         Returns:
             str: 処理されたJSON文字列
+
+        Raises:
+            ValueError: コンテンツが空、またはJSON形式でない場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -69,22 +72,16 @@ class ScriptJsonGenerator(BaseGenerator):
         # API応答からテキストを抽出
         content = self.client.extract_content(response)
         
+        if not content:
+            self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
+        
         # JSON部分を抽出
         json_content = self._extract_json(content)
         
         if not json_content:
-            # JSON形式が抽出できなかった場合はダミーデータを返す
-            return json.dumps({
-                "title": "台本タイトル",
-                "characters": [
-                    {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
-                    {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
-                ],
-                "script": [
-                    {"type": "dialog", "speaker": "MC", "content": "みなさんこんにちは！"},
-                    {"type": "dialog", "speaker": "EXPERT", "content": "こんにちは。今日はよろしくお願いします。"}
-                ]
-            }, ensure_ascii=False, indent=2)
+            self.logger.error("レスポンスからJSON形式を抽出できませんでした")
+            raise ValueError("レスポンスからJSON形式を抽出できませんでした")
             
         # JSONの検証と成形
         try:
@@ -94,8 +91,7 @@ class ScriptJsonGenerator(BaseGenerator):
             return json.dumps(json_obj, ensure_ascii=False, indent=2)
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON解析エラー: {e}")
-            # 解析に失敗した場合は元のテキストを返す
-            return json_content
+            raise ValueError(f"JSON解析エラー: {e}")
 
     def _extract_json(self, content: str) -> str:
         """テキストからJSON部分を抽出する

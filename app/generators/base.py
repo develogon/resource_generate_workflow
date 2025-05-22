@@ -49,6 +49,9 @@ class BaseGenerator:
 
         Returns:
             str: 処理された応答テキスト
+            
+        Raises:
+            ValueError: コンテンツが空の場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -59,9 +62,12 @@ class BaseGenerator:
             if isinstance(response['content'], list):
                 for item in response['content']:
                     if item.get('type') == 'text':
-                        return item.get('text', '')
+                        text = item.get('text', '')
+                        if text:
+                            return text
         
-        return "レスポンス処理エラー"
+        self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+        raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
 
     async def generate(self, structure: Dict, additional_context: Optional[Dict] = None, output_path: Optional[str] = None) -> str:
         """コンテンツを生成する

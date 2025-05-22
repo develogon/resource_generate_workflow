@@ -48,6 +48,45 @@ class TestScriptJsonGenerator:
             mock_system.assert_called_once_with('script_json')
             mock_message.assert_called_once_with('script_json')
     
+    def test_process_response_with_empty_content(self, script_json_generator):
+        """空のコンテンツを処理する場合のテスト"""
+        # モッククライアントを設定
+        mock_client = MagicMock()
+        mock_client.extract_content.return_value = ""
+        script_json_generator.client = mock_client
+        
+        # 空のコンテンツを処理するとValueErrorが発生することを確認
+        with pytest.raises(ValueError) as excinfo:
+            script_json_generator.process_response({})
+        
+        assert "APIレスポンスからコンテンツを抽出できませんでした" in str(excinfo.value)
+    
+    def test_process_response_with_invalid_json(self, script_json_generator):
+        """無効なJSON形式のコンテンツを処理する場合のテスト"""
+        # モッククライアントを設定
+        mock_client = MagicMock()
+        mock_client.extract_content.return_value = "これはJSONではありません"
+        script_json_generator.client = mock_client
+        
+        # 無効なJSON形式のコンテンツを処理するとValueErrorが発生することを確認
+        with pytest.raises(ValueError) as excinfo:
+            script_json_generator.process_response({})
+        
+        assert "レスポンスからJSON形式を抽出できませんでした" in str(excinfo.value)
+    
+    def test_process_response_with_invalid_json_format(self, script_json_generator):
+        """JSONパース不可能なコンテンツを処理する場合のテスト"""
+        # モッククライアントを設定
+        mock_client = MagicMock()
+        mock_client.extract_content.return_value = "```json\n{\"title\": \"不正なJSON\", \"missing\": }\n```"
+        script_json_generator.client = mock_client
+        
+        # JSONパース不可能なコンテンツを処理するとValueErrorが発生することを確認
+        with pytest.raises(ValueError) as excinfo:
+            script_json_generator.process_response({})
+        
+        assert "JSON解析エラー" in str(excinfo.value)
+    
     @pytest.mark.asyncio
     async def test_generate_async(self, script_json_generator):
         """非同期台本JSON生成のテスト"""
@@ -130,6 +169,48 @@ EXPERT: こんにちは。今日はこのテーマについて詳しく解説し
         # API呼び出しが行われたことを確認
         mock_client.prepare_request.assert_called_once()
     
+    @pytest.mark.asyncio
+    async def test_generate_async_with_error(self, script_json_generator):
+        """APIエラー時の非同期台本JSON生成のテスト"""
+        # モックの非同期メソッド定義
+        async def mock_call_api(request):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": ""
+                    }
+                ]
+            }
+        
+        # クライアントのモック設定
+        mock_client = MagicMock()
+        mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
+        mock_client.call_api = mock_call_api
+        mock_client.extract_content.return_value = ""
+        
+        # モッククライアントを注入
+        script_json_generator.client = mock_client
+        
+        script_content = """# 台本：メインタイトル
+
+## 登場人物
+- 司会者（MC）：番組の進行役
+- 専門家（EXPERT）：技術の専門家
+
+## 台本
+
+MC: みなさんこんにちは！今回のテーマは「メインタイトル」です。
+
+EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
+"""
+        
+        # エラーが発生することを確認
+        with pytest.raises(ValueError) as excinfo:
+            await script_json_generator.generate(script_content)
+        
+        assert "APIレスポンスからコンテンツを抽出できませんでした" in str(excinfo.value)
+    
     def test_generate_script_json(self, script_json_generator, monkeypatch):
         """同期版台本JSON生成のテスト"""
         # モックレスポンス用のJSON文字列
@@ -178,4 +259,32 @@ EXPERT: こんにちは。今日はこのテーマについて詳しく解説し
             assert "characters" in json_obj
             assert "script" in json_obj
         except json.JSONDecodeError:
-            assert False, "結果は有効なJSON形式ではありません" 
+            assert False, "結果は有効なJSON形式ではありません"
+    
+    def test_generate_script_json_with_error(self, script_json_generator, monkeypatch):
+        """エラー発生時の同期版台本JSON生成のテスト"""
+        # エラーを発生させる非同期メソッド
+        async def mock_generate_error(*args, **kwargs):
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
+        
+        # 非同期メソッドをモック
+        monkeypatch.setattr(script_json_generator, 'generate', mock_generate_error)
+        
+        script_content = """# 台本：メインタイトル
+
+## 登場人物
+- 司会者（MC）：番組の進行役
+- 専門家（EXPERT）：技術の専門家
+
+## 台本
+
+MC: みなさんこんにちは！今回のテーマは「メインタイトル」です。
+
+EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
+"""
+        
+        # エラーが発生することを確認
+        with pytest.raises(ValueError) as excinfo:
+            script_json_generator.generate_script_json(script_content)
+        
+        assert "APIレスポンスからコンテンツを抽出できませんでした" in str(excinfo.value) 

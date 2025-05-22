@@ -71,6 +71,9 @@ class TweetGenerator(BaseGenerator):
 
         Returns:
             str: 生成されたツイートのCSV
+            
+        Raises:
+            ValueError: コンテンツが空の場合やCSV形式が抽出できない場合
         """
         if isinstance(response, str):
             # すでにテキスト形式の場合はそのまま返す
@@ -78,6 +81,10 @@ class TweetGenerator(BaseGenerator):
             
         # API応答からテキストを抽出
         content = self.client.extract_content(response)
+        
+        if not content:
+            self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
+            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
         
         # CSV形式を抽出
         csv_content = ""
@@ -94,12 +101,10 @@ class TweetGenerator(BaseGenerator):
             if in_csv_block:
                 csv_content += line + "\n"
                 
-        # CSV形式が抽出できなかった場合はダミーデータを返す
+        # CSV形式が抽出できなかった場合はエラーを返す
         if not csv_content:
-            csv_content = """tweet_text,hashtags,media_suggestion
-サンプルツイート1です。記事の内容について触れています。,#サンプル #テクノロジー,記事のキーポイントを示す図
-サンプルツイート2です。別の視点から記事を紹介します。,#サンプル #プログラミング,コードのスクリーンショット
-"""
+            self.logger.error("レスポンスからCSV形式を抽出できませんでした")
+            raise ValueError("レスポンスからCSV形式を抽出できませんでした")
                 
         return csv_content
 
