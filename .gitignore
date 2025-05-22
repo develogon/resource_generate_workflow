@@ -5,3 +5,7 @@
 */.idea
 */.vscode
 */.venv
+
+checkpoints/
+output/
+temp/
