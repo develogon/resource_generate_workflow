@@ -3,8 +3,8 @@ import os
 import shutil
 from unittest.mock import patch, MagicMock, mock_open
 
-# テスト対象のモジュールをインポート（まだ実装されていない場合はコメントアウト）
-# from app.processors.section import SectionProcessor
+# テスト対象のモジュールをインポート
+from app.processors.section import SectionProcessor
 
 class TestSectionProcessor:
     """セクションプロセッサのテストクラス"""
@@ -12,38 +12,7 @@ class TestSectionProcessor:
     @pytest.fixture
     def section_processor(self):
         """テスト用のセクションプロセッサインスタンスを作成"""
-        # コメントアウトされているコードは、実際のクラスが実装された後に有効化する
-        # return SectionProcessor()
-        
-        # モックインスタンスを返す（クラスが実装されるまでの一時的な対応）
-        mock_processor = MagicMock()
-        
-        # create_section_folderメソッドが呼ばれたときに実行される関数
-        def mock_create_section_folder(chapter_dir, section_title):
-            section_name = section_title.replace(": ", "_").replace(" ", "_").replace(".", "_")
-            section_dir = os.path.join(chapter_dir, section_name)
-            # 実際のディレクトリは作成しない（テストのため）
-            return section_dir
-            
-        mock_processor.create_section_folder.side_effect = mock_create_section_folder
-        
-        # write_section_contentメソッドが呼ばれたときに実行される関数
-        def mock_write_section_content(section_dir, content):
-            section_file = os.path.join(section_dir, "text.md")
-            # 実際のファイルは作成しない（テストのため）
-            return section_file
-            
-        mock_processor.write_section_content.side_effect = mock_write_section_content
-        
-        # write_section_structureメソッドが呼ばれたときに実行される関数
-        def mock_write_section_structure(section_dir, structure):
-            structure_file = os.path.join(section_dir, "section_structure.yaml")
-            # 実際のファイルは作成しない（テストのため）
-            return structure_file
-            
-        mock_processor.write_section_structure.side_effect = mock_write_section_structure
-        
-        return mock_processor
+        return SectionProcessor()
     
     @pytest.fixture
     def sample_section_data(self):
@@ -87,16 +56,12 @@ class TestSectionProcessor:
         
         section_title = "1.1 基本概念"
         
-        # 実際のインスタンスを使用する場合（コメントアウトされたコードを使用）
-        # section_dir = section_processor.create_section_folder(chapter_dir, section_title)
-        # assert os.path.exists(section_dir)
-        # assert section_dir.name == "1_1_基本概念"
-        
-        # モックインスタンスを使用する場合
+        # 実際のインスタンスを使用
         section_dir = section_processor.create_section_folder(str(chapter_dir), section_title)
         
         # 結果が正しいことを確認
         assert section_dir is not None
+        assert os.path.exists(section_dir)
         assert "1_1_基本概念" in section_dir
         assert str(chapter_dir) in section_dir
     
@@ -106,27 +71,22 @@ class TestSectionProcessor:
         section_dir = tmp_path / "1_1_基本概念"
         section_dir.mkdir()
         
-        # 実際のインスタンスを使用する場合（コメントアウトされたコードを使用）
-        # section_file = section_processor.write_section_content(section_dir, sample_section_data["content"])
-        # assert os.path.exists(section_file)
-        # 
-        # with open(section_file, "r") as f:
-        #     content = f.read()
-        #     assert sample_section_data["content"] in content
-        
-        # モックインスタンスを使用する場合
         section_file = section_processor.write_section_content(str(section_dir), sample_section_data["content"])
         
         # 結果が正しいことを確認
-        assert section_file is not None
+        mock_file.assert_called_with(os.path.join(str(section_dir), "text.md"), "w", encoding="utf-8")
+        mock_file().write.assert_called_with(sample_section_data["content"])
         assert "text.md" in section_file
         assert str(section_dir) in section_file
     
     @patch("builtins.open", new_callable=mock_open)
-    def test_write_section_structure(self, mock_file, section_processor, sample_structure_data, tmp_path):
+    @patch("yaml.dump")
+    def test_write_section_structure(self, mock_yaml_dump, mock_file, section_processor, sample_structure_data, tmp_path):
         """セクション構造書き込みのテスト"""
         section_dir = tmp_path / "1_1_基本概念"
         section_dir.mkdir()
+        
+        structure_file = section_processor.write_section_structure(str(section_dir), sample_structure_data)
         
         # 実際のインスタンスを使用する場合（コメントアウトされたコードを使用）
         # structure_file = section_processor.write_section_structure(section_dir, sample_structure_data)
