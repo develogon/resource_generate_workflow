@@ -1,100 +1,128 @@
 import pytest
+import os
 from unittest.mock import patch, MagicMock
 
-# テスト対象のモジュールをインポート（まだ実装されていない場合はコメントアウト）
-# from app.workflow.engine import WorkflowEngine
+# テスト対象のモジュールをインポート
+from app.workflow.engine import WorkflowEngine
+from app.workflow.task_manager import TaskManager, TaskType
 
 class TestWorkflowEngine:
     """ワークフローエンジンのテストクラス"""
     
     @pytest.fixture
-    def workflow_engine(self):
+    def workflow_engine(self, tmp_path):
         """テスト用のワークフローエンジンインスタンスを作成"""
-        # コメントアウトされているコードは、実際のクラスが実装された後に有効化する
-        # engine = WorkflowEngine()
-        # return engine
-        
-        # モックインスタンスを返す（クラスが実装されるまでの一時的な対応）
-        mock_engine = MagicMock()
-        mock_engine.start.return_value = True
-        mock_engine.resume.return_value = True
-        mock_engine.execute_task_loop.return_value = True
-        return mock_engine
+        config = {
+            "checkpoint_dir": str(tmp_path / "checkpoints"),
+        }
+        engine = WorkflowEngine(config)
+        return engine
     
     def test_workflow_initialization(self, workflow_engine):
         """ワークフローエンジンの初期化をテスト"""
         # ワークフローエンジンが正しく初期化されていることを確認
         assert workflow_engine is not None
+        assert workflow_engine.task_manager is not None
+        assert workflow_engine.checkpoint_manager is not None
         
-        # 以下のコードは、実際のクラスが実装された後に有効化する
-        # assert workflow_engine.task_manager is not None
-        # assert workflow_engine.checkpoint_manager is not None
+        # 設定が反映されていることを確認
+        assert "checkpoint_dir" in workflow_engine.config
     
-    @patch('app.workflow.task_manager.TaskManager')
-    @patch('app.workflow.checkpoint.CheckpointManager')
-    def test_start_workflow(self, mock_checkpoint_manager, mock_task_manager):
+    @patch('os.path.exists')
+    def test_start_workflow(self, mock_exists, workflow_engine, tmp_path):
         """ワークフローの開始処理をテスト"""
-        # このテストは、実際のクラスが実装された後に有効化する
-        # mock_task_manager_instance = mock_task_manager.return_value
-        # mock_checkpoint_manager_instance = mock_checkpoint_manager.return_value
+        # モックの設定
+        mock_exists.return_value = True
         
-        # engine = WorkflowEngine()
-        # result = engine.start(input_path="/path/to/input.md")
+        # タスク管理システムのモック
+        mock_task_manager = MagicMock()
+        workflow_engine.task_manager = mock_task_manager
         
-        # assert result is True
-        # mock_task_manager_instance.register_task.assert_called()
-        # mock_checkpoint_manager_instance.save_checkpoint.assert_called_with("INITIAL")
-        pass
+        # チェックポイント管理システムのモック
+        mock_checkpoint_manager = MagicMock()
+        workflow_engine.checkpoint_manager = mock_checkpoint_manager
+        
+        # execute_task_loopをモックに置き換え
+        workflow_engine.execute_task_loop = MagicMock(return_value=True)
+        
+        # ワークフローを開始
+        input_path = str(tmp_path / "input.md")
+        result = workflow_engine.start(input_path)
+        
+        # 結果の確認
+        assert result is True
+        mock_task_manager.register_task.assert_called()
+        mock_checkpoint_manager.save_checkpoint.assert_called_with("INITIAL", {
+            "input_path": input_path,
+            "stage": "INITIALIZED"
+        })
+        workflow_engine.execute_task_loop.assert_called_once()
     
-    @patch('app.workflow.task_manager.TaskManager')
-    @patch('app.workflow.checkpoint.CheckpointManager')
-    def test_resume_workflow(self, mock_checkpoint_manager, mock_task_manager):
+    @patch('app.workflow.checkpoint.CheckpointManager.load_checkpoint')
+    @patch('app.workflow.checkpoint.CheckpointManager.restore_from_checkpoint')
+    def test_resume_workflow(self, mock_restore, mock_load, workflow_engine):
         """ワークフローの再開処理をテスト"""
-        # このテストは、実際のクラスが実装された後に有効化する
-        # mock_task_manager_instance = mock_task_manager.return_value
-        # mock_checkpoint_manager_instance = mock_checkpoint_manager.return_value
-        # mock_checkpoint_manager_instance.load_latest_checkpoint.return_value = {
-        #     "id": "checkpoint-001",
-        #     "state": {"current_task": "task-003"}
-        # }
+        # モックの設定
+        mock_load.return_value = {
+            "id": "checkpoint-001",
+            "state": {"current_task": "task-003"}
+        }
+        mock_restore.return_value = True
         
-        # engine = WorkflowEngine()
-        # result = engine.resume()
+        # execute_task_loopをモックに置き換え
+        workflow_engine.execute_task_loop = MagicMock(return_value=True)
         
-        # assert result is True
-        # mock_checkpoint_manager_instance.load_latest_checkpoint.assert_called_once()
-        # mock_checkpoint_manager_instance.restore_from_checkpoint.assert_called_once()
-        pass
+        # ワークフローを再開
+        result = workflow_engine.resume("checkpoint-001")
+        
+        # 結果の確認
+        assert result is True
+        mock_load.assert_called_once_with("checkpoint-001")
+        mock_restore.assert_called_once()
+        workflow_engine.execute_task_loop.assert_called_once()
     
-    @patch('app.workflow.task_manager.TaskManager')
-    def test_execute_task_loop(self, mock_task_manager):
+    @patch('app.workflow.task_manager.TaskManager.get_next_executable_task')
+    @patch('app.workflow.task_manager.TaskManager.mark_as_completed')
+    def test_execute_task_loop(self, mock_mark_completed, mock_get_task, workflow_engine):
         """タスク実行ループをテスト"""
-        # このテストは、実際のクラスが実装された後に有効化する
-        # mock_task_manager_instance = mock_task_manager.return_value
-        # mock_task_manager_instance.get_next_executable_task.side_effect = [
-        #     {"id": "task-001", "type": "FILE_OPERATION"},
-        #     {"id": "task-002", "type": "API_CALL"},
-        #     None  # タスクがなくなったらNoneを返す
-        # ]
+        # モックの設定
+        mock_get_task.side_effect = [
+            {"id": "task-001", "type": "FILE_OPERATION", "params": {"operation": "READ"}},
+            {"id": "task-002", "type": "API_CALL", "params": {"api": "TEST"}},
+            None  # タスクがなくなったらNoneを返す
+        ]
         
-        # engine = WorkflowEngine()
-        # result = engine.execute_task_loop()
+        # チェックポイント管理システムのモック
+        mock_checkpoint_manager = MagicMock()
+        workflow_engine.checkpoint_manager = mock_checkpoint_manager
         
-        # assert result is True
-        # assert mock_task_manager_instance.get_next_executable_task.call_count == 3
-        # assert mock_task_manager_instance.mark_as_completed.call_count == 2
-        pass
+        # タスク実行メソッドをモックに置き換え
+        workflow_engine._execute_task = MagicMock(return_value={"success": True})
+        
+        # タスク実行ループを実行
+        result = workflow_engine.execute_task_loop()
+        
+        # 結果の確認
+        assert result is True
+        assert mock_get_task.call_count == 3
+        assert mock_mark_completed.call_count == 2
+        assert workflow_engine._execute_task.call_count == 2
+        assert mock_checkpoint_manager.save_checkpoint.call_count == 2
     
-    @patch('app.workflow.checkpoint.CheckpointManager')
-    def test_handle_error(self, mock_checkpoint_manager):
+    def test_handle_error(self, workflow_engine):
         """エラー処理をテスト"""
-        # このテストは、実際のクラスが実装された後に有効化する
-        # mock_checkpoint_manager_instance = mock_checkpoint_manager.return_value
+        # チェックポイント管理システムのモック
+        mock_checkpoint_manager = MagicMock()
+        workflow_engine.checkpoint_manager = mock_checkpoint_manager
         
-        # engine = WorkflowEngine()
-        # error = Exception("テストエラー")
-        # result = engine.handle_error(error, {"task_id": "task-003"})
+        # エラーハンドリングを実行
+        error = Exception("テストエラー")
+        context = {"task_id": "task-003"}
+        result = workflow_engine.handle_error(error, context)
         
-        # assert result is False
-        # mock_checkpoint_manager_instance.save_checkpoint.assert_called_with("ERROR")
-        pass 
+        # 結果の確認
+        assert result is False
+        mock_checkpoint_manager.save_checkpoint.assert_called_with("ERROR", {
+            "error": str(error),
+            "context": context
+        }) 

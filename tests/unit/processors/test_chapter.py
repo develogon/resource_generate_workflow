@@ -15,56 +15,118 @@ class TestChapterProcessor:
         return ChapterProcessor()
     
     @pytest.fixture
-    def sample_chapter_data(self):
-        """サンプルチャプターデータを返す"""
-        return {
-            "title": "第1章: はじめに",
-            "content": """## 第1章: はじめに
+    def sample_chapter_content(self):
+        """サンプルのチャプターコンテンツを返す"""
+        return """## 第1章: はじめに
 
-この章では基本的な概念について説明します。
+この章では、システムの概要と基本的な考え方について説明します。
 
-### 1.1 基本概念
+### 1.1 システム概要
 
-基本的な概念は以下の通りです：
+システムは以下のコンポーネントで構成されています：
 
-- 項目1
-- 項目2
-- 項目3
+- コンポーネント1
+- コンポーネント2
+- コンポーネント3
 
-### 1.2 重要な考え方
+### 1.2 基本的な考え方
 
-重要な考え方について説明します。"""
-        }
+基本的な考え方は次の通りです：
+
+1. 原則1
+2. 原則2
+3. 原則3
+"""
     
     def test_create_chapter_folder(self, chapter_processor, tmp_path):
         """チャプターフォルダ作成のテスト"""
-        base_dir = tmp_path / "test_content"
-        base_dir.mkdir()
+        # フォルダパラメータの設定
+        chapter_info = {
+            "number": 1,
+            "title": "はじめに"
+        }
+        base_dir = str(tmp_path)
         
-        chapter_title = "第1章: はじめに"
+        # チャプターフォルダを作成
+        chapter_dir = chapter_processor.create_chapter_folder(chapter_info, base_dir)
         
-        # 実際のインスタンスを使用
-        chapter_dir = chapter_processor.create_chapter_folder(str(base_dir), chapter_title)
-        
-        # 結果が正しいことを確認
+        # フォルダが作成されていることを確認
         assert chapter_dir is not None
-        assert os.path.exists(chapter_dir)
-        assert "第1章_はじめに" in chapter_dir
-        assert str(base_dir) in chapter_dir
+        assert chapter_dir.endswith("chapter1")
+        assert (tmp_path / "chapter1").exists()
     
-    @patch("builtins.open", new_callable=mock_open)
-    def test_write_chapter_content(self, mock_file, chapter_processor, sample_chapter_data, tmp_path):
+    def test_write_chapter_content(self, chapter_processor, sample_chapter_content, tmp_path):
         """チャプターコンテンツ書き込みのテスト"""
-        chapter_dir = tmp_path / "第1章_はじめに"
-        chapter_dir.mkdir()
+        # フォルダを作成
+        chapter_dir = str(tmp_path / "chapter1")
+        if not (tmp_path / "chapter1").exists():
+            (tmp_path / "chapter1").mkdir()
         
-        chapter_file = chapter_processor.write_chapter_content(str(chapter_dir), sample_chapter_data["content"])
+        # コンテンツを書き込み
+        file_path = chapter_processor.write_chapter_content(sample_chapter_content, chapter_dir)
         
-        # 結果が正しいことを確認
-        mock_file.assert_called_with(os.path.join(str(chapter_dir), "text.md"), "w", encoding="utf-8")
-        mock_file().write.assert_called_with(sample_chapter_data["content"])
-        assert "text.md" in chapter_file
-        assert str(chapter_dir) in chapter_file
+        # ファイルが作成されていることを確認
+        assert file_path is not None
+        assert (tmp_path / "chapter1" / "text.md").exists()
+        
+        # ファイルの内容を確認
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            assert content == sample_chapter_content
+    
+    def test_extract_chapter_title(self, chapter_processor, sample_chapter_content):
+        """チャプタータイトル抽出のテスト"""
+        title = chapter_processor.extract_chapter_title(sample_chapter_content)
+        
+        # タイトルが正しく抽出されることを確認
+        assert title is not None
+        assert title == "第1章: はじめに"
+    
+    def test_get_chapter_number(self, chapter_processor):
+        """チャプター番号取得のテスト"""
+        chapter_titles = [
+            "第1章: はじめに",
+            "第2章: 基本概念",
+            "第３章: 実装方法"  # 全角数字
+        ]
+        
+        # 各チャプターの番号を取得
+        numbers = [chapter_processor.get_chapter_number(title) for title in chapter_titles]
+        
+        # 番号が正しく取得されることを確認
+        assert numbers == [1, 2, 3]
+    
+    def test_process_chapter(self, chapter_processor, sample_chapter_content, tmp_path):
+        """チャプター処理のテスト"""
+        # 処理パラメータの設定
+        base_dir = str(tmp_path)
+        
+        # チャプターを処理
+        result = chapter_processor.process_chapter(sample_chapter_content, base_dir)
+        
+        # 処理結果を確認
+        assert result is not None
+        assert "chapter_dir" in result
+        assert "title" in result
+        assert "number" in result
+        assert "file_path" in result
+        assert result["title"] == "第1章: はじめに"
+        assert result["number"] == 1
+        assert (tmp_path / "chapter1").exists()
+        assert (tmp_path / "chapter1" / "text.md").exists()
+    
+    def test_extract_chapter_metadata(self, chapter_processor, sample_chapter_content):
+        """チャプターメタデータ抽出のテスト"""
+        metadata = chapter_processor.extract_chapter_metadata(sample_chapter_content)
+        
+        # メタデータが正しく抽出されることを確認
+        assert metadata is not None
+        assert "title" in metadata
+        assert "number" in metadata
+        assert "first_paragraph" in metadata
+        assert metadata["title"] == "第1章: はじめに"
+        assert metadata["number"] == 1
+        assert "この章では" in metadata["first_paragraph"]
     
     def test_combine_chapter_contents(self, chapter_processor, tmp_path):
         """チャプターコンテンツ結合のテスト"""
@@ -97,14 +159,6 @@ class TestChapterProcessor:
         # 結合ファイルが作成されたことを確認
         combined_file = chapter_dir / "article.md"
         assert os.path.exists(combined_file)
-    
-    def test_extract_chapter_title(self, chapter_processor, sample_chapter_data):
-        """チャプタータイトル抽出のテスト"""
-        title = chapter_processor.extract_chapter_title(sample_chapter_data["content"])
-        
-        # 結果が正しいことを確認
-        assert title is not None
-        assert title == "第1章: はじめに"
     
     def test_sanitize_filename(self, chapter_processor):
         """ファイル名のサニタイズテスト"""
