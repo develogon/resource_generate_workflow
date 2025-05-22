@@ -101,7 +101,6 @@ alwaysApply: true
 - 重要な判断が必要な場合は、その都度報告し、承認を得てください。
 - 予期せぬ問題が発生した場合は、即座に報告し、対応策を提案してください。
 - **明示的に指示されていない変更は行わないでください。** 必要と思われる変更がある場合は、まず提案として報告し、承認を得てから実施してください。
-- **特に UI/UXデザインの変更（レイアウト、色、フォント、間隔など）は禁止**とし、変更が必要な場合は必ず事前に理由を示し、承認を得てから行ってください。
 - **技術スタックに記載のバージョン（APIやフレームワーク、ライブラリ等）を勝手に変更しないでください。** 変更が必要な場合は、その理由を明確にして承認を得るまでは変更を行わないでください。
 
 ---
@@ -137,34 +136,6 @@ alwaysApply: true
 
 # ディレクトリ構成
 
-[architecture_design.md](mdc:docs/architecture_design.md) を参照すること
-
-## 設計パターン適用ガイドライン
-
-- **Strategy パターン**: 解析戦略の切り替え（`parser.py`）
-- **Template Method パターン**: 処理フローの標準化（`processor.py`）
-- **Factory Method パターン**: コンテンツ生成（`content_generator.py`）
-- **Adapter パターン**: 外部サービス（`client.py`）
-- **Facade パターン**: ファイル操作（`file_manager.py`）
-- **Memento パターン**: 処理状態の保存と復元（`state_manager.py`）
-- **Decorator パターン**: リトライロジック（`retry.py`）
-- **Worker Pool パターン**: 並列処理（`parallel.py`）
-
-## 命名規則と実装ガイドライン
-
-- クラス名: PascalCase (例: `ContentProcessor`)
-- メソッド名/関数名: snake_case (例: `process_content()`)
-- 定数: UPPER_SNAKE_CASE (例: `MAX_RETRY_COUNT`)
-- 変数: snake_case (例: `file_content`)
-- プライベートメソッド/変数: アンダースコア接頭辞 (例: `_private_method()`)
-- 抽象クラス: "Base"または"Abstract"接頭辞 (例: `BaseProcessor`)
-- ファイル名: snake_case (例: `file_manager.py`)
-
-## エラー処理ガイドライン
-
-- 例外は `utils/exceptions.py` で定義された階層構造に従う
-- APIエラーは適切にリトライし、最大試行回数を超えた場合のみ例外発生
-- 状態保存を活用し、エラー発生時に処理を再開可能にする
-- ログレベルを適切に使い分け（DEBUG, INFO, WARNING, ERROR, CRITICAL）
+[architecture-design.md](mdc:docs/architecture-design.md) を参照すること
 
 以上の指示に従い、確実で質の高い実装を行います。指示された範囲内でのみ処理を行い、不要な追加実装は行いません。不明点や重要な判断が必要な場合は、必ず確認を取ります。

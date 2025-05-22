@@ -1,4 +1,5 @@
-{{SUMMARY}}
+
+---
 
 🏆⬇︎超豪華特典10個プレゼント⬇︎🏆
 https://line.develogon-officialsite.com/line/open/Qqh9TeowKbgQ?mtid=8yUhs8QjSNk0
