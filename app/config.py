@@ -17,81 +17,28 @@ from typing import Dict, Any, Optional
 # ロガーの設定
 logger = logging.getLogger(__name__)
 
-# デフォルト設定
-DEFAULT_CONFIG = {
-    # 基本設定
-    "workspace_dir": os.getcwd(),
-    "checkpoint_dir": "checkpoints",
-    "output_dir": "output",
-    "temp_dir": "temp",
-    
-    # API設定
-    "api": {
-        "claude": {
-            "model": "claude-3-7-sonnet-20250219",
-            "max_tokens": 200000,
-            "temperature": 0.2,
-            "timeout": 300,
-            "retry_count": 3,
-            "retry_delay": 5
-        },
-        "openai": {
-            "model": "gpt-4o-mini",
-            "image_model": "dall-e-3",
-            "image_quality": "standard",
-            "image_size": "1024x1024",
-            "temperature": 0.7,
-            "timeout": 60,
-            "retry_count": 3,
-            "retry_delay": 5
-        }
-    },
-    
-    # GitHub設定
-    "github": {
-        "owner": "develogon",
-        "repo": "til",
-        "branch": "master",
-        "commit_message_prefix": "[自動生成] "
-    },
-    
-    # AWS S3設定
-    "s3": {
-        "bucket": "develogon-til",
-        "prefix": "resources/",
-        "region": "ap-northeast-1",
-        "public_url_base": "https://s3.amazonaws.com/develogon-til"
-    },
-    
-    # Slack設定
-    "slack": {
-        "webhook_url": "",
-        "channel": "#notifications",
-        "username": "リソース生成ワークフロー",
-        "icon_emoji": ":robot_face:"
-    },
-    
-    # プロンプト設定
-    "prompts": {
-        "system_prompt_dir": "prompts/system",
-        "message_prompt_dir": "prompts/message"
-    },
-    
-    # テンプレート設定
-    "templates": {
-        "thumbnail_template": "templates/thumbnail_template.yaml",
-        "description_template": "templates/description_template.md",
-        "section_structure_template": "templates/section_structure_template.yml"
-    },
-    
-    # 処理設定
-    "processing": {
-        "max_parallel_tasks": 4,
-        "checkpoint_interval": 60,  # 秒単位
-        "error_retry_count": 3,
-        "error_retry_delay": 10
-    }
-}
+# デフォルト設定ファイルのパス
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.default.yaml")
+
+
+def load_default_config() -> Dict[str, Any]:
+    """
+    デフォルト設定ファイルから設定を読み込む
+
+    Returns:
+        Dict[str, Any]: デフォルト設定
+    """
+    try:
+        if os.path.exists(DEFAULT_CONFIG_PATH):
+            logger.debug(f"デフォルト設定ファイルを読み込みます: {DEFAULT_CONFIG_PATH}")
+            with open(DEFAULT_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        else:
+            logger.warning(f"デフォルト設定ファイルが見つかりません: {DEFAULT_CONFIG_PATH}")
+            return {}
+    except Exception as e:
+        logger.error(f"デフォルト設定ファイルの読み込み中にエラーが発生しました: {str(e)}")
+        return {}
 
 
 def load_env_vars() -> Dict[str, Any]:
@@ -274,7 +221,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         Dict[str, Any]: 読み込まれた設定
     """
     # デフォルト設定をベースにする
-    config = DEFAULT_CONFIG.copy()
+    config = load_default_config()
     
     # 設定ファイルから読み込む
     file_config = load_config_file(config_path)

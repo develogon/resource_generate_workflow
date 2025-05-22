@@ -1,0 +1,26 @@
+# API クライアント
+anthropic>=0.18.0
+openai>=1.12.0
+PyGithub>=2.1.1
+boto3>=1.34.0
+slack-sdk>=3.27.0
+httpx>=0.26.0
+
+# 画像処理
+cairosvg>=2.7.1
+Pillow>=10.2.0
+mermaid-cli>=0.1.1
+
+# データフォーマット
+PyYAML>=6.0.1
+pydantic>=2.5.0
+
+# ユーティリティ
+rich>=13.7.0
+typer>=0.9.0
+
+# テスト
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+pytest-asyncio>=0.23.0 
