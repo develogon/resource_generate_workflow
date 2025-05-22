@@ -172,14 +172,12 @@ title/
 │   │   ├── structure.yaml      # パラグラフ構造を含むセクション全体の構造Markdown
 │   │   ├── paragraph1/
 │   │   │   ├── text.md
-│   │   │   ├── structure.md  # セクション構造から分割された単一パラグラフの構造
 │   │   │   ├── article.md
 │   │   │   ├── script.md
 │   │   │   ├── script.json
 │   │   │   └── images/
 │   │   ├── paragraph2/
 │   │   │   ├── text.md
-│   │   │   ├── structure.md
 │   │   │   ├── article.md
 │   │   │   ├── script.md
 │   │   │   ├── script.json
