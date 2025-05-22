@@ -1,0 +1,119 @@
+title: "1.1 プログラミングの基本概念"
+learning_objectives:
+  - "変数とデータ型の基本を理解する"
+  - "条件分岐の仕組みと使い方を習得する"
+  - "ループ構造による繰り返し処理を理解する"
+  - "関数の定義と呼び出し方を習得する"
+
+paragraphs:
+  - type: "heading"
+    content: "プログラミングの基本概念について"
+    level: 2
+    metadata:
+      order: 1
+      purpose: "introduction"
+      original_text: "プログラミングを学ぶ上で最初に理解すべき基本的な概念について説明します。これらの概念は全てのプログラミング言語に共通する重要な基礎です。"
+
+  - type: "text"
+    content: "プログラミングを学ぶ上で最初に理解すべき基本的な概念について説明します。これらの概念は全てのプログラミング言語に共通する重要な基礎です。"
+    metadata:
+      order: 2
+      purpose: "explanation"
+
+  - type: "heading"
+    content: "変数とデータ型"
+    level: 3
+    metadata:
+      order: 3
+      purpose: "section_title"
+
+  - type: "text"
+    content: "変数はプログラミングの基本的な要素で、データを一時的に格納するための名前付きのメモリ領域です。"
+    metadata:
+      order: 4
+      purpose: "explanation"
+
+  - type: "list"
+    items:
+      - "整数型: 1, 2, 3などの整数値を格納"
+      - "浮動小数点型: 3.14, 0.5などの小数値を格納"
+      - "文字列型: 「こんにちは」などのテキストを格納"
+      - "ブール型: TrueまたはFalseの真偽値を格納"
+    metadata:
+      order: 5
+      purpose: "enumeration"
+
+  - type: "code"
+    language: "python"
+    content: "# Pythonでの変数の例\nage = 25               # 整数型\nheight = 175.5         # 浮動小数点型\nname = \"山田太郎\"      # 文字列型\nis_student = True      # ブール型"
+    metadata:
+      order: 6
+      purpose: "example"
+
+  - type: "heading"
+    content: "条件分岐"
+    level: 3
+    metadata:
+      order: 7
+      purpose: "section_title"
+
+  - type: "text"
+    content: "条件分岐は、指定した条件によってプログラムの挙動を変えるための制御構造です。主にif文を使用します。"
+    metadata:
+      order: 8
+      purpose: "explanation"
+
+  - type: "code"
+    language: "python"
+    content: "# 条件分岐の例\nage = 18\n\nif age >= 20:\n    print(\"成人です\")\nelse:\n    print(\"未成年です\")"
+    metadata:
+      order: 9
+      purpose: "example"
+
+  - type: "heading"
+    content: "ループ構造"
+    level: 3
+    metadata:
+      order: 10
+      purpose: "section_title"
+
+  - type: "text"
+    content: "ループは同じ処理を繰り返し実行するための制御構造です。主にfor文とwhile文があります。"
+    metadata:
+      order: 11
+      purpose: "explanation"
+
+  - type: "code"
+    language: "python"
+    content: "# for文の例\nfor i in range(5):\n    print(i)  # 0, 1, 2, 3, 4が順番に表示される\n\n# while文の例\ncount = 0\nwhile count < 5:\n    print(count)\n    count += 1  # 0, 1, 2, 3, 4が順番に表示される"
+    metadata:
+      order: 12
+      purpose: "example"
+
+  - type: "heading"
+    content: "関数"
+    level: 3
+    metadata:
+      order: 13
+      purpose: "section_title"
+
+  - type: "text"
+    content: "関数は特定の処理をひとまとめにして名前を付け、再利用可能にしたものです。"
+    metadata:
+      order: 14
+      purpose: "explanation"
+
+  - type: "code"
+    language: "python"
+    content: "# 関数の定義と呼び出し\ndef greet(name):\n    return f\"こんにちは、{name}さん\"\n\n# 関数の呼び出し\nmessage = greet(\"山田\")\nprint(message)  # 「こんにちは、山田さん」と表示される"
+    metadata:
+      order: 15
+      purpose: "example"
+
+  - type: "image"
+    description: "プログラミングの基本概念（変数、条件分岐、ループ、関数）を視覚的に表した図"
+    format: "mermaid"
+    content: "graph TD\n    A[プログラミング基本概念] --> B[変数]\n    A --> C[条件分岐]\n    A --> D[ループ構造]\n    A --> E[関数]\n    B --> F[データを格納]\n    C --> G[処理の分岐]\n    D --> H[処理の繰り返し]\n    E --> I[コードの再利用]"
+    metadata:
+      order: 16
+      purpose: "visualization" 
