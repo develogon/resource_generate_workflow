@@ -69,6 +69,37 @@ class BaseGenerator:
         self.logger.error("APIレスポンスからコンテンツを抽出できませんでした")
         raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
 
+    def get_output_path(self, structure: Dict, level: str, file_name: str) -> str:
+        """出力先パスを取得する
+
+        architecture-design.mdの3.3節のディレクトリ構造に従って出力パスを生成します。
+
+        Args:
+            structure (Dict): 構造情報
+            level (str): レベル ('title', 'chapter', 'section')
+            file_name (str): ファイル名 ('article.md', 'script.md', 'script.json', 'tweets.csv' など)
+
+        Returns:
+            str: 出力先パス
+        """
+        title = structure.get('title', 'untitled').replace(' ', '_').lower()
+        
+        if level == 'title':
+            # トップレベル: title/file_name
+            return os.path.join(title, file_name)
+        elif level == 'chapter':
+            # チャプターレベル: title/chapter_name/file_name
+            chapter_name = structure.get('chapter_name', 'chapter1')
+            return os.path.join(title, chapter_name, file_name)
+        elif level == 'section':
+            # セクションレベル: title/chapter_name/section_name/file_name
+            chapter_name = structure.get('chapter_name', 'chapter1')
+            section_name = structure.get('section_name', 'section1')
+            return os.path.join(title, chapter_name, section_name, file_name)
+        else:
+            self.logger.warning(f"不明なレベル: {level}, デフォルトパスを使用します")
+            return os.path.join(title, file_name)
+
     async def generate(self, structure: Dict, additional_context: Optional[Dict] = None, output_path: Optional[str] = None) -> str:
         """コンテンツを生成する
 
@@ -76,6 +107,7 @@ class BaseGenerator:
             structure (Dict): 構造情報
             additional_context (Dict, optional): 追加コンテキスト情報. デフォルトはNone
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
 
         Returns:
             str: 生成されたコンテンツ
@@ -89,8 +121,8 @@ class BaseGenerator:
         # APIリクエストを準備
         request = self.client.prepare_request(prompt)
         
-        # APIを呼び出し
-        response = await self.client.call_api(request)
+        # APIを呼び出し（同期関数なのでawaitは使わない）
+        response = self.client.call_api(request)
         
         # 応答を処理
         content = self.process_response(response)

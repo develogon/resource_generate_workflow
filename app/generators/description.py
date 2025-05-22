@@ -24,6 +24,7 @@ class DescriptionGenerator(BaseGenerator):
         """
         super().__init__()
         self.client = ClaudeAPIClient(api_key, model)
+        self.logger = logging.getLogger(__name__)
 
     def prepare_prompt(self, structure_md: str, article_content: str, **kwargs) -> str:
         """説明文生成用プロンプトを準備する
@@ -119,23 +120,37 @@ class DescriptionGenerator(BaseGenerator):
             # テンプレートファイルがない場合は簡易的なフッターを追加
             return f"{description}\n\n---\n\n© {datetime.now().year} All Rights Reserved."
 
-    async def generate(self, structure_md: str, article_content: str, 
+    async def generate(self, structure: Dict, structure_md: str, article_content: str, 
                       min_length: int = 300, max_length: int = 500,
                       output_path: Optional[str] = None, 
                       append_footer: bool = True) -> str:
         """説明文を生成する
 
         Args:
+            structure (Dict): コンテンツ構造情報
             structure_md (str): 記事の構造（Markdown形式）
             article_content (str): 記事内容
             min_length (int, optional): 最小文字数. デフォルトは300
             max_length (int, optional): 最大文字数. デフォルトは500
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
             append_footer (bool, optional): フッターを追加するかどうか. デフォルトはTrue
 
         Returns:
             str: 生成された説明文
         """
+        # 出力パスが指定されていない場合は自動生成
+        if output_path is None:
+            # structureからlevelを判断
+            if 'section_name' in structure:
+                level = 'section'
+            elif 'chapter_name' in structure:
+                level = 'chapter'
+            else:
+                level = 'title'
+            
+            output_path = self.get_output_path(structure, level, 'description.md')
+        
         # プロンプトを準備
         prompt = self.prepare_prompt(
             structure_md, 
@@ -147,8 +162,8 @@ class DescriptionGenerator(BaseGenerator):
         # APIリクエストを準備
         request = self.client.prepare_request(prompt)
         
-        # APIを呼び出し
-        response = await self.client.call_api(request)
+        # APIを呼び出し（同期関数なのでawaitは使わない）
+        response = self.client.call_api(request)
         
         # 応答を処理
         description = self.process_response(response)
@@ -159,24 +174,26 @@ class DescriptionGenerator(BaseGenerator):
         
         # 出力先が指定されていれば保存（実際の実装時はFileUtilsを使用）
         if output_path:
-            # from app.utils.file import FileUtils
-            # FileUtils.write_file(output_path, description)
+            # ディレクトリが存在しない場合は作成
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             pass
             
         return description
         
-    def generate_description(self, structure_md: str, article_content: str,
+    def generate_description(self, structure: Dict, structure_md: str, article_content: str,
                             min_length: int = 300, max_length: int = 500,
                             output_path: Optional[str] = None,
                             append_footer: bool = True) -> str:
         """説明文を生成する（同期版）
 
         Args:
+            structure (Dict): コンテンツ構造情報
             structure_md (str): 記事の構造（Markdown形式）
             article_content (str): 記事内容
             min_length (int, optional): 最小文字数. デフォルトは300
             max_length (int, optional): 最大文字数. デフォルトは500
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
             append_footer (bool, optional): フッターを追加するかどうか. デフォルトはTrue
 
         Returns:
@@ -188,10 +205,10 @@ class DescriptionGenerator(BaseGenerator):
             
             # イベントループの状態に関わらず非同期メソッドを実行
             return loop.run_until_complete(
-                self.generate(structure_md, article_content, min_length, max_length, output_path, append_footer)
+                self.generate(structure, structure_md, article_content, min_length, max_length, output_path, append_footer)
             )
         except RuntimeError:
             # イベントループがない場合、新しく作成して実行
             return asyncio.run(
-                self.generate(structure_md, article_content, min_length, max_length, output_path, append_footer)
+                self.generate(structure, structure_md, article_content, min_length, max_length, output_path, append_footer)
             ) 

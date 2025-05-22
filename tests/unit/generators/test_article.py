@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+import os
 from unittest.mock import patch, MagicMock
 
 # テスト対象のモジュールをインポート
@@ -22,6 +23,27 @@ class TestArticleGenerator:
                 {"title": "セクション1", "content": "セクション1の内容..."},
                 {"title": "セクション2", "content": "セクション2の内容..."}
             ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_chapter(self):
+        """チャプター情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "sections": [
+                {"title": "セクション1", "content": "セクション1の内容..."}
+            ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_section(self):
+        """セクション情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "section_name": "セクション1",
+            "content": "セクション1の内容..."
         }
     
     def test_prepare_article_prompt(self, article_generator, sample_structure_data):
@@ -48,8 +70,8 @@ class TestArticleGenerator:
             mock_message.assert_called_once_with('article')
     
     @pytest.mark.asyncio
-    async def test_generate_async(self, article_generator, sample_structure_data):
-        """非同期記事生成のテスト"""
+    async def test_generate_async_with_output_path(self, article_generator, sample_structure_data):
+        """出力パスを指定した非同期記事生成のテスト"""
         # モックの非同期メソッド定義
         async def mock_call_api(request):
             return {
@@ -83,18 +105,75 @@ class TestArticleGenerator:
         # モッククライアントを注入
         article_generator.client = mock_client
         
-        # 非同期メソッドのテスト
-        result = await article_generator.generate(sample_structure_data)
+        # os.makedirsをモック化
+        with patch('os.makedirs') as mock_makedirs:
+            # 出力パスを指定
+            output_path = "output/article.md"
+            
+            # 非同期メソッドのテスト
+            result = await article_generator.generate(sample_structure_data, output_path)
+            
+            # 結果が正しいことを確認
+            assert result is not None
+            assert isinstance(result, str)
+            assert "# メインタイトル" in result
+            assert "## セクション1" in result
+            assert "## セクション2" in result
+            
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(output_path), exist_ok=True)
+            
+            # API呼び出しの準備が行われたことを確認
+            mock_client.prepare_request.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_generate_async_auto_output_path(self, article_generator, sample_structure_with_chapter):
+        """出力パスが自動生成される非同期記事生成のテスト"""
+        # モックの非同期メソッド定義
+        async def mock_call_api(request):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """# メインタイトル
+
+## セクション1
+これはセクション1の内容です。
+"""
+                    }
+                ]
+            }
         
-        # 結果が正しいことを確認
-        assert result is not None
-        assert isinstance(result, str)
-        assert "# メインタイトル" in result
-        assert "## セクション1" in result
-        assert "## セクション2" in result
+        # クライアントのモック設定
+        mock_client = MagicMock()
+        mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
+        mock_client.call_api = mock_call_api
+        mock_client.extract_content.return_value = """# メインタイトル
+
+## セクション1
+これはセクション1の内容です。
+"""
+        # モッククライアントを注入
+        article_generator.client = mock_client
         
-        # API呼び出しの準備が行われたことを確認
-        mock_client.prepare_request.assert_called_once()
+        # get_output_pathとos.makedirsをモック化
+        expected_path = "メインタイトル/チャプター1/article.md"
+        with patch.object(article_generator, 'get_output_path', return_value=expected_path) as mock_get_path, \
+             patch('os.makedirs') as mock_makedirs:
+            
+            # 出力パスを指定せずに非同期メソッドを呼び出し
+            result = await article_generator.generate(sample_structure_with_chapter)
+            
+            # 結果が正しいことを確認
+            assert result is not None
+            assert isinstance(result, str)
+            assert "# メインタイトル" in result
+            
+            # get_output_pathが正しく呼ばれたことを確認
+            mock_get_path.assert_called_once_with(sample_structure_with_chapter, 'chapter', 'article.md')
+            
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(expected_path), exist_ok=True)
     
     def test_generate_article(self, article_generator, sample_structure_data, monkeypatch):
         """同期版記事生成のテスト"""
@@ -109,14 +188,18 @@ class TestArticleGenerator:
 """
         
         # モック化して同期メソッドが非同期メソッドを呼び出すことをシミュレート
-        async def mock_generate(*args, **kwargs):
+        async def mock_generate(structure, output_path=None):
+            assert structure == sample_structure_data
+            assert output_path is None or output_path == "test_output.md"
             return expected_result
         
         # 非同期メソッドをモック
         monkeypatch.setattr(article_generator, 'generate', mock_generate)
         
-        # 同期メソッドのテスト
-        result = article_generator.generate_article(sample_structure_data)
+        # 出力パスなしでテスト
+        result1 = article_generator.generate_article(sample_structure_data)
+        assert result1 == expected_result
         
-        # 結果が正しいことを確認
-        assert result == expected_result 
+        # 出力パスありでテスト
+        result2 = article_generator.generate_article(sample_structure_data, "test_output.md")
+        assert result2 == expected_result 

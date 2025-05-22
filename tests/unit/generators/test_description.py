@@ -15,6 +15,38 @@ class TestDescriptionGenerator:
         """テスト用の説明文ジェネレータインスタンスを作成"""
         return DescriptionGenerator()
     
+    @pytest.fixture
+    def sample_structure_data(self):
+        """テスト用の構造データを作成"""
+        return {
+            "title": "メインタイトル",
+            "sections": [
+                {"title": "セクション1", "content": "セクション1の内容..."},
+                {"title": "セクション2", "content": "セクション2の内容..."}
+            ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_chapter(self):
+        """チャプター情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "sections": [
+                {"title": "セクション1", "content": "セクション1の内容..."}
+            ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_section(self):
+        """セクション情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "section_name": "セクション1",
+            "content": "セクション1の内容..."
+        }
+    
     def test_prepare_description_prompt(self, description_generator):
         """説明文生成用プロンプト準備のテスト"""
         # get_system_promptとget_message_promptをモック化
@@ -40,8 +72,8 @@ class TestDescriptionGenerator:
             mock_message.assert_called_once_with('description')
     
     @pytest.mark.asyncio
-    async def test_generate_async(self, description_generator):
-        """非同期説明文生成のテスト"""
+    async def test_generate_async_with_output_path(self, description_generator, sample_structure_data):
+        """出力パスを指定した非同期説明文生成のテスト"""
         # モックの非同期メソッド定義
         async def mock_call_api(request):
             return {
@@ -81,12 +113,18 @@ class TestDescriptionGenerator:
 ---
 
 © 2023 サンプルプロジェクト
-"""):
+"""), \
+             patch('os.makedirs') as mock_makedirs:
+            
             structure_md = "# メインタイトル\n\n## 第1章: はじめに\n- 1.1 基本概念\n..."
             article_content = "# メインタイトル\n\nこれは記事の内容です..."
+            output_path = "output/description.md"
             
             # 非同期メソッドのテスト
-            result = await description_generator.generate(structure_md, article_content)
+            result = await description_generator.generate(
+                sample_structure_data, structure_md, article_content,
+                min_length=300, max_length=500, output_path=output_path
+            )
             
             # 結果が正しいことを確認
             assert result is not None
@@ -95,10 +133,66 @@ class TestDescriptionGenerator:
             assert "本コンテンツでは" in result
             assert "© 2023" in result
             
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(output_path), exist_ok=True)
+            
             # API呼び出しが行われたことを確認
             mock_client.prepare_request.assert_called_once()
     
-    def test_generate_description(self, description_generator, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_generate_async_auto_output_path(self, description_generator, sample_structure_with_section):
+        """出力パスが自動生成される非同期説明文生成のテスト"""
+        # モックの非同期メソッド定義
+        async def mock_call_api(request):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """# メインタイトル - 説明文
+
+本コンテンツでは、プログラミングの基本概念から実践的な応用例まで、体系的に学ぶことができます。
+"""
+                    }
+                ]
+            }
+        
+        # クライアントのモック設定
+        mock_client = MagicMock()
+        mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
+        mock_client.call_api = mock_call_api
+        mock_client.extract_content.return_value = """# メインタイトル - 説明文
+
+本コンテンツでは、プログラミングの基本概念から実践的な応用例まで、体系的に学ぶことができます。
+"""
+        # モッククライアントを注入
+        description_generator.client = mock_client
+        
+        # append_templateとget_output_pathをモック
+        expected_path = "メインタイトル/チャプター1/セクション1/description.md"
+        with patch.object(description_generator, 'append_template', return_value="モック説明文") as mock_append, \
+             patch.object(description_generator, 'get_output_path', return_value=expected_path) as mock_get_path, \
+             patch('os.makedirs') as mock_makedirs:
+            
+            structure_md = "# メインタイトル\n\n## 第1章: はじめに\n- 1.1 基本概念\n..."
+            article_content = "# メインタイトル\n\nこれは記事の内容です..."
+            
+            # 出力パスを指定せずに非同期メソッドを呼び出し
+            result = await description_generator.generate(
+                sample_structure_with_section, structure_md, article_content
+            )
+            
+            # 結果が正しいことを確認
+            assert result is not None
+            assert isinstance(result, str)
+            assert result == "モック説明文"
+            
+            # get_output_pathが正しく呼ばれたことを確認
+            mock_get_path.assert_called_once_with(sample_structure_with_section, 'section', 'description.md')
+            
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(expected_path), exist_ok=True)
+    
+    def test_generate_description(self, description_generator, sample_structure_data, monkeypatch):
         """同期版説明文生成のテスト"""
         # モックレスポンス用の文字列
         expected_result = """# メインタイトル - 説明文
@@ -113,7 +207,15 @@ class TestDescriptionGenerator:
 """
         
         # モック化して同期メソッドが非同期メソッドを呼び出すことをシミュレート
-        async def mock_generate(*args, **kwargs):
+        async def mock_generate(structure, structure_md, article_content, min_length=300, max_length=500, 
+                               output_path=None, append_footer=True):
+            assert structure == sample_structure_data
+            assert "メインタイトル" in structure_md
+            assert "記事の内容" in article_content
+            assert min_length == 300
+            assert max_length == 500
+            assert output_path is None or output_path == "test_output.md"
+            assert append_footer is True
             return expected_result
         
         # 非同期メソッドをモック
@@ -122,11 +224,18 @@ class TestDescriptionGenerator:
         structure_md = "# メインタイトル\n\n## 第1章: はじめに\n- 1.1 基本概念\n..."
         article_content = "# メインタイトル\n\nこれは記事の内容です..."
         
-        # 同期メソッドのテスト
-        result = description_generator.generate_description(structure_md, article_content)
+        # 出力パスなしでテスト
+        result1 = description_generator.generate_description(
+            sample_structure_data, structure_md, article_content
+        )
+        assert result1 == expected_result
         
-        # 結果が正しいことを確認
-        assert result == expected_result
+        # 出力パスありでテスト
+        result2 = description_generator.generate_description(
+            sample_structure_data, structure_md, article_content, 
+            min_length=300, max_length=500, output_path="test_output.md"
+        )
+        assert result2 == expected_result
     
     @patch("builtins.open", new_callable=mock_open, read_data="# テンプレート\n\n著作権表示: {{year}} 著作者名")
     def test_append_template(self, mock_file, description_generator):

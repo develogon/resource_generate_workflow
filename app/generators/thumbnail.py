@@ -125,15 +125,17 @@ class ThumbnailGenerator(BaseGenerator):
         # 将来的には画像処理（リサイズ、フィルタ適用など）を追加する可能性がある
         return response
 
-    async def generate(self, title: str, description: str, output_path: Optional[str] = None, 
+    async def generate(self, structure: Dict, title: str, description: str, output_path: Optional[str] = None, 
                      upload_to_s3: bool = False, s3_key: Optional[str] = None,
                      template_path: Optional[str] = None, **kwargs) -> Tuple[bytes, Optional[str]]:
         """サムネイル画像を生成する
 
         Args:
+            structure (Dict): コンテンツ構造情報
             title (str): 記事タイトル
             description (str): 記事の説明文
             output_path (str, optional): 出力先ファイルパス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
             upload_to_s3 (bool, optional): S3にアップロードするかどうか. デフォルトはFalse
             s3_key (str, optional): S3のキー. デフォルトはNone
             template_path (str, optional): テンプレートファイルパス. デフォルトはNone
@@ -142,6 +144,20 @@ class ThumbnailGenerator(BaseGenerator):
         Returns:
             Tuple[bytes, Optional[str]]: 生成された画像データとS3 URL（アップロードした場合）
         """
+        # 出力パスが指定されていない場合は自動生成
+        if output_path is None:
+            # structureからlevelを判断
+            if 'section_name' in structure:
+                level = 'section'
+            elif 'chapter_name' in structure:
+                level = 'chapter'
+            else:
+                level = 'title'
+            
+            # タイトルを使ってファイル名を生成
+            file_name = f"thumbnail/{re.sub(r'[^\w\-]', '_', title.lower())}.png"
+            output_path = self.get_output_path(structure, level, file_name)
+        
         # テンプレートを読み込む
         template = self.load_template(template_path)
         
@@ -155,15 +171,15 @@ class ThumbnailGenerator(BaseGenerator):
         quality = template.get('quality', 'standard')
         
         # 画像を生成
-        image_data = await self.openai_client.generate_image(prompt, size, quality)
+        image_data = self.openai_client.generate_image(prompt, size, quality)
         
         # 応答を処理
         processed_image = self.process_response(image_data)
         
         # 出力先が指定されていれば保存
         if output_path:
-            # from app.utils.file import FileUtils
-            # FileUtils.write_binary_file(output_path, processed_image)
+            # ディレクトリが存在しない場合は作成
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             pass
             
         # S3にアップロードする場合
@@ -179,15 +195,17 @@ class ThumbnailGenerator(BaseGenerator):
             
         return processed_image, s3_url
 
-    def generate_thumbnail(self, title: str, description: str, output_path: Optional[str] = None, 
+    def generate_thumbnail(self, structure: Dict, title: str, description: str, output_path: Optional[str] = None, 
                          upload_to_s3: bool = False, s3_key: Optional[str] = None,
                          template_path: Optional[str] = None, **kwargs) -> Tuple[bytes, Optional[str]]:
         """サムネイル画像を生成する（同期版）
 
         Args:
+            structure (Dict): コンテンツ構造情報
             title (str): 記事タイトル
             description (str): 記事の説明文
             output_path (str, optional): 出力先ファイルパス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
             upload_to_s3 (bool, optional): S3にアップロードするかどうか. デフォルトはFalse
             s3_key (str, optional): S3のキー. デフォルトはNone
             template_path (str, optional): テンプレートファイルパス. デフォルトはNone
@@ -202,10 +220,10 @@ class ThumbnailGenerator(BaseGenerator):
             
             # イベントループの状態に関わらず非同期メソッドを実行
             return loop.run_until_complete(
-                self.generate(title, description, output_path, upload_to_s3, s3_key, template_path, **kwargs)
+                self.generate(structure, title, description, output_path, upload_to_s3, s3_key, template_path, **kwargs)
             )
         except RuntimeError:
             # イベントループがない場合、新しく作成して実行
             return asyncio.run(
-                self.generate(title, description, output_path, upload_to_s3, s3_key, template_path, **kwargs)
+                self.generate(structure, title, description, output_path, upload_to_s3, s3_key, template_path, **kwargs)
             ) 

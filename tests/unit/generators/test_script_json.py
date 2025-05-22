@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 import json
+import os
 from unittest.mock import patch, MagicMock
 
 # テスト対象のモジュールをインポート
@@ -23,6 +24,27 @@ class TestScriptJsonGenerator:
                 {"title": "セクション1", "content": "セクション1の内容..."},
                 {"title": "セクション2", "content": "セクション2の内容..."}
             ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_chapter(self):
+        """チャプター情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "sections": [
+                {"title": "セクション1", "content": "セクション1の内容..."}
+            ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_section(self):
+        """セクション情報を含むサンプル構造データ"""
+        return {
+            "title": "メインタイトル",
+            "chapter_name": "チャプター1",
+            "section_name": "セクション1",
+            "content": "セクション1の内容..."
         }
     
     def test_prepare_script_json_prompt(self, script_json_generator, sample_structure_data):
@@ -88,8 +110,8 @@ class TestScriptJsonGenerator:
         assert "JSON解析エラー" in str(excinfo.value)
     
     @pytest.mark.asyncio
-    async def test_generate_async(self, script_json_generator):
-        """非同期台本JSON生成のテスト"""
+    async def test_generate_async_with_output_path(self, script_json_generator, sample_structure_data):
+        """出力パスを指定した非同期台本JSON生成のテスト"""
         # モックの非同期メソッド定義
         async def mock_call_api(request):
             return {
@@ -146,31 +168,116 @@ MC: みなさんこんにちは！今回のテーマは「メインタイトル�
 EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
 """
         
-        # 非同期メソッドのテスト
-        result = await script_json_generator.generate(script_content)
-        
-        # 結果が正しいことを確認
-        assert result is not None
-        assert isinstance(result, str)
-        
-        # JSON形式であることを確認
-        try:
-            json_obj = json.loads(result)
-            assert "title" in json_obj
-            assert "characters" in json_obj
-            assert "script" in json_obj
-            assert len(json_obj["characters"]) == 2
-            assert len(json_obj["script"]) == 2
-            assert json_obj["characters"][0]["name"] == "MC"
-            assert json_obj["characters"][1]["name"] == "EXPERT"
-        except json.JSONDecodeError:
-            assert False, "結果は有効なJSON形式ではありません"
-        
-        # API呼び出しが行われたことを確認
-        mock_client.prepare_request.assert_called_once()
+        # os.makedirsをモック化
+        with patch('os.makedirs') as mock_makedirs:
+            # 出力パスを指定
+            output_path = "output/script.json"
+            
+            # 非同期メソッドのテスト
+            result = await script_json_generator.generate(sample_structure_data, script_content, output_path)
+            
+            # 結果が正しいことを確認
+            assert result is not None
+            assert isinstance(result, str)
+            
+            # JSON形式であることを確認
+            try:
+                json_obj = json.loads(result)
+                assert "title" in json_obj
+                assert "characters" in json_obj
+                assert "script" in json_obj
+                assert len(json_obj["characters"]) == 2
+                assert len(json_obj["script"]) == 2
+                assert json_obj["characters"][0]["name"] == "MC"
+                assert json_obj["characters"][1]["name"] == "EXPERT"
+            except json.JSONDecodeError:
+                assert False, "結果は有効なJSON形式ではありません"
+            
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(output_path), exist_ok=True)
+            
+            # API呼び出しが行われたことを確認
+            mock_client.prepare_request.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_generate_async_with_error(self, script_json_generator):
+    async def test_generate_async_auto_output_path(self, script_json_generator, sample_structure_with_section):
+        """出力パスが自動生成される非同期台本JSON生成のテスト"""
+        # モックの非同期メソッド定義
+        async def mock_call_api(request):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """```json
+{
+  "title": "メインタイトル",
+  "characters": [
+    {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
+    {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
+  ],
+  "script": [
+    {"type": "dialog", "speaker": "MC", "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"},
+    {"type": "dialog", "speaker": "EXPERT", "line": "こんにちは。今日はこのテーマについて詳しく解説します。"}
+  ]
+}
+```"""
+                    }
+                ]
+            }
+        
+        # クライアントのモック設定
+        mock_client = MagicMock()
+        mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
+        mock_client.call_api = mock_call_api
+        mock_client.extract_content.return_value = """```json
+{
+  "title": "メインタイトル",
+  "characters": [
+    {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
+    {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
+  ],
+  "script": [
+    {"type": "dialog", "speaker": "MC", "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"},
+    {"type": "dialog", "speaker": "EXPERT", "line": "こんにちは。今日はこのテーマについて詳しく解説します。"}
+  ]
+}
+```"""
+        # モッククライアントを注入
+        script_json_generator.client = mock_client
+        
+        script_content = """# 台本：メインタイトル
+
+## 登場人物
+- 司会者（MC）：番組の進行役
+- 専門家（EXPERT）：技術の専門家
+
+## 台本
+
+MC: みなさんこんにちは！今回のテーマは「メインタイトル」です。
+
+EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
+"""
+        
+        # get_output_pathとos.makedirsをモック化
+        expected_path = "メインタイトル/チャプター1/セクション1/script.json"
+        with patch.object(script_json_generator, 'get_output_path', return_value=expected_path) as mock_get_path, \
+             patch('os.makedirs') as mock_makedirs:
+            
+            # 出力パスを指定せずに非同期メソッドを呼び出し
+            result = await script_json_generator.generate(sample_structure_with_section, script_content)
+            
+            # 結果が正しいことを確認
+            assert result is not None
+            assert isinstance(result, str)
+            
+            # get_output_pathが正しく呼ばれたことを確認
+            mock_get_path.assert_called_once_with(sample_structure_with_section, 'section', 'script.json')
+            
+            # os.makedirsが呼ばれたことを確認
+            mock_makedirs.assert_called_once_with(os.path.dirname(expected_path), exist_ok=True)
+    
+    @pytest.mark.asyncio
+    async def test_generate_async_with_error(self, script_json_generator, sample_structure_data):
         """APIエラー時の非同期台本JSON生成のテスト"""
         # モックの非同期メソッド定義
         async def mock_call_api(request):
@@ -207,11 +314,11 @@ EXPERT: こんにちは。今日はこのテーマについて詳しく解説し
         
         # エラーが発生することを確認
         with pytest.raises(ValueError) as excinfo:
-            await script_json_generator.generate(script_content)
+            await script_json_generator.generate(sample_structure_data, script_content)
         
         assert "APIレスポンスからコンテンツを抽出できませんでした" in str(excinfo.value)
     
-    def test_generate_script_json(self, script_json_generator, monkeypatch):
+    def test_generate_script_json(self, script_json_generator, sample_structure_data, monkeypatch):
         """同期版台本JSON生成のテスト"""
         # モックレスポンス用のJSON文字列
         expected_result = json.dumps({
@@ -227,7 +334,10 @@ EXPERT: こんにちは。今日はこのテーマについて詳しく解説し
         }, ensure_ascii=False, indent=2)
         
         # モック化して同期メソッドが非同期メソッドを呼び出すことをシミュレート
-        async def mock_generate(*args, **kwargs):
+        async def mock_generate(structure, script_content, output_path=None):
+            assert structure == sample_structure_data
+            assert "登場人物" in script_content
+            assert output_path is None or output_path == "test_output.json"
             return expected_result
         
         # 非同期メソッドをモック
@@ -246,26 +356,19 @@ MC: みなさんこんにちは！今回のテーマは「メインタイトル�
 EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
 """
         
-        # 同期メソッドのテスト
-        result = script_json_generator.generate_script_json(script_content)
+        # 出力パスなしでテスト
+        result1 = script_json_generator.generate_script_json(sample_structure_data, script_content)
+        assert result1 == expected_result
         
-        # 結果が正しいことを確認
-        assert result == expected_result
-        
-        # JSON形式であることを確認
-        try:
-            json_obj = json.loads(result)
-            assert "title" in json_obj
-            assert "characters" in json_obj
-            assert "script" in json_obj
-        except json.JSONDecodeError:
-            assert False, "結果は有効なJSON形式ではありません"
+        # 出力パスありでテスト
+        result2 = script_json_generator.generate_script_json(sample_structure_data, script_content, "test_output.json")
+        assert result2 == expected_result
     
-    def test_generate_script_json_with_error(self, script_json_generator, monkeypatch):
+    def test_generate_script_json_with_error(self, script_json_generator, sample_structure_data, monkeypatch):
         """エラー発生時の同期版台本JSON生成のテスト"""
-        # エラーを発生させる非同期メソッド
-        async def mock_generate_error(*args, **kwargs):
-            raise ValueError("APIレスポンスからコンテンツを抽出できませんでした")
+        # エラーを発生させる非同期メソッドをモック
+        async def mock_generate_error(structure, script_content, output_path=None):
+            raise ValueError("テストエラー")
         
         # 非同期メソッドをモック
         monkeypatch.setattr(script_json_generator, 'generate', mock_generate_error)
@@ -285,6 +388,6 @@ EXPERT: こんにちは。今日はこのテーマについて詳しく解説し
         
         # エラーが発生することを確認
         with pytest.raises(ValueError) as excinfo:
-            script_json_generator.generate_script_json(script_content)
+            script_json_generator.generate_script_json(sample_structure_data, script_content)
         
-        assert "APIレスポンスからコンテンツを抽出できませんでした" in str(excinfo.value) 
+        assert "テストエラー" in str(excinfo.value) 

@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock, mock_open
 import pytest_asyncio
 import asyncio
+import os
 
 # テスト対象のモジュールをインポート
 from app.generators.base import BaseGenerator
@@ -34,6 +35,38 @@ class TestBaseGenerator:
             ]
         }
     
+    @pytest.fixture
+    def sample_structure_with_chapter(self):
+        """チャプター情報を含むサンプル構造データ"""
+        return {
+            "title": "サンプルタイトル",
+            "chapter_name": "チャプター1",
+            "sections": [
+                {
+                    "title": "セクション1",
+                    "paragraphs": [
+                        {
+                            "content": "これはセクション1の内容です。"
+                        }
+                    ]
+                }
+            ]
+        }
+    
+    @pytest.fixture
+    def sample_structure_with_section(self):
+        """セクション情報を含むサンプル構造データ"""
+        return {
+            "title": "サンプルタイトル",
+            "chapter_name": "チャプター1",
+            "section_name": "セクション1",
+            "paragraphs": [
+                {
+                    "content": "これはセクション1の内容です。"
+                }
+            ]
+        }
+
     @pytest_asyncio.fixture
     async def base_generator(self):
         """テスト用のベースジェネレータインスタンスを作成"""
@@ -71,30 +104,75 @@ class TestBaseGenerator:
         assert isinstance(result, str)
         assert "# 生成されたコンテンツ" in result
     
+    def test_get_output_path_title_level(self, base_generator, sample_structure_data):
+        """タイトルレベルの出力パス生成テスト"""
+        file_name = "article.md"
+        level = "title"
+        
+        output_path = base_generator.get_output_path(sample_structure_data, level, file_name)
+        
+        # 出力パスが正しく生成されることを確認
+        expected_path = os.path.join("サンプルタイトル", file_name)
+        assert output_path == expected_path
+    
+    def test_get_output_path_chapter_level(self, base_generator, sample_structure_with_chapter):
+        """チャプターレベルの出力パス生成テスト"""
+        file_name = "article.md"
+        level = "chapter"
+        
+        output_path = base_generator.get_output_path(sample_structure_with_chapter, level, file_name)
+        
+        # 出力パスが正しく生成されることを確認
+        expected_path = os.path.join("サンプルタイトル", "チャプター1", file_name)
+        assert output_path == expected_path
+    
+    def test_get_output_path_section_level(self, base_generator, sample_structure_with_section):
+        """セクションレベルの出力パス生成テスト"""
+        file_name = "article.md"
+        level = "section"
+        
+        output_path = base_generator.get_output_path(sample_structure_with_section, level, file_name)
+        
+        # 出力パスが正しく生成されることを確認
+        expected_path = os.path.join("サンプルタイトル", "チャプター1", "セクション1", file_name)
+        assert output_path == expected_path
+    
+    def test_get_output_path_unknown_level(self, base_generator, sample_structure_data):
+        """不明なレベルの出力パス生成テスト"""
+        file_name = "article.md"
+        level = "unknown"
+        
+        output_path = base_generator.get_output_path(sample_structure_data, level, file_name)
+        
+        # デフォルトのパスが生成されることを確認
+        expected_path = os.path.join("サンプルタイトル", file_name)
+        assert output_path == expected_path
+    
     @pytest.mark.asyncio
     async def test_generate(self, base_generator, sample_structure_data):
         """コンテンツ生成の実行テスト"""
-        async def mock_call_api(request):
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "# 生成されたコンテンツ\n\nこれはAPIによって生成されたコンテンツです。"
-                    }
-                ]
-            }
+        mock_response = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "# 生成されたコンテンツ\n\nこれはAPIによって生成されたコンテンツです。"
+                }
+            ]
+        }
         
         # モックをインスタンス変数として設定
         mock_client = MagicMock()
         mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
-        mock_client.call_api = mock_call_api
+        # 非同期関数を同期的に返すようにモック
+        mock_client.call_api = MagicMock(return_value=mock_response)
         mock_client.extract_content.return_value = "# 生成されたコンテンツ\n\nこれはAPIによって生成されたコンテンツです。"
         
         base_generator.client = mock_client
         
         additional_context = {"style": "技術解説"}
+        output_path = "test_output.md"
         
-        result = await base_generator.generate(sample_structure_data, additional_context)
+        result = await base_generator.generate(sample_structure_data, additional_context, output_path)
         
         # コンテンツが正しく生成されることを確認
         assert result is not None

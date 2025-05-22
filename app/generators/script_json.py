@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import os
 import re
 from typing import Dict, Any, Optional, Union, List
 
@@ -23,6 +24,7 @@ class ScriptJsonGenerator(BaseGenerator):
         """
         super().__init__()
         self.client = ClaudeAPIClient(api_key, model)
+        self.logger = logging.getLogger(__name__)
 
     def prepare_prompt(self, script_content: str, **kwargs) -> str:
         """台本JSON変換用プロンプトを準備する
@@ -114,42 +116,58 @@ class ScriptJsonGenerator(BaseGenerator):
             
         return ""
 
-    async def generate(self, script_content: str, output_path: Optional[str] = None) -> str:
+    async def generate(self, structure: Dict, script_content: str, output_path: Optional[str] = None) -> str:
         """台本JSONを生成する
 
         Args:
+            structure (Dict): コンテンツ構造情報
             script_content (str): Markdown形式の台本内容
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
 
         Returns:
             str: 生成されたJSON文字列
         """
+        # 出力パスが指定されていない場合は自動生成
+        if output_path is None:
+            # structureからlevelを判断
+            if 'section_name' in structure:
+                level = 'section'
+            elif 'chapter_name' in structure:
+                level = 'chapter'
+            else:
+                level = 'title'
+            
+            output_path = self.get_output_path(structure, level, 'script.json')
+        
         # プロンプトを準備
         prompt = self.prepare_prompt(script_content)
         
         # APIリクエストを準備
         request = self.client.prepare_request(prompt)
         
-        # APIを呼び出し
-        response = await self.client.call_api(request)
+        # APIを呼び出し（同期関数なのでawaitは使わない）
+        response = self.client.call_api(request)
         
         # 応答を処理
         json_content = self.process_response(response)
         
         # 出力先が指定されていれば保存（実際の実装時はFileUtilsを使用）
         if output_path:
-            # from app.utils.file import FileUtils
-            # FileUtils.write_file(output_path, json_content)
+            # ディレクトリが存在しない場合は作成
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             pass
             
         return json_content
         
-    def generate_script_json(self, script_content: str, output_path: Optional[str] = None) -> str:
+    def generate_script_json(self, structure: Dict, script_content: str, output_path: Optional[str] = None) -> str:
         """台本JSONを生成する（同期版）
 
         Args:
+            structure (Dict): コンテンツ構造情報
             script_content (str): Markdown形式の台本内容
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
 
         Returns:
             str: 生成されたJSON文字列
@@ -159,7 +177,7 @@ class ScriptJsonGenerator(BaseGenerator):
             loop = asyncio.get_event_loop()
             
             # イベントループの状態に関わらず非同期メソッドを実行
-            return loop.run_until_complete(self.generate(script_content, output_path))
+            return loop.run_until_complete(self.generate(structure, script_content, output_path))
         except RuntimeError:
             # イベントループがない場合、新しく作成して実行
-            return asyncio.run(self.generate(script_content, output_path)) 
+            return asyncio.run(self.generate(structure, script_content, output_path)) 

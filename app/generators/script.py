@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import os
 from typing import Dict, Any, Optional, Union
 
 from app.generators.base import BaseGenerator
@@ -21,6 +22,7 @@ class ScriptGenerator(BaseGenerator):
         """
         super().__init__()
         self.client = ClaudeAPIClient(api_key, model)
+        self.logger = logging.getLogger(__name__)
 
     def prepare_prompt(self, structure: Dict, article_content: str, **kwargs) -> str:
         """台本生成用プロンプトを準備する
@@ -87,26 +89,39 @@ class ScriptGenerator(BaseGenerator):
             structure (Dict): コンテンツ構造情報
             article_content (str): 記事内容
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
 
         Returns:
             str: 生成された台本のMarkdown
         """
+        # 出力パスが指定されていない場合は自動生成
+        if output_path is None:
+            # structureからlevelを判断
+            if 'section_name' in structure:
+                level = 'section'
+            elif 'chapter_name' in structure:
+                level = 'chapter'
+            else:
+                level = 'title'
+            
+            output_path = self.get_output_path(structure, level, 'script.md')
+        
         # プロンプトを準備
         prompt = self.prepare_prompt(structure, article_content)
         
         # APIリクエストを準備
         request = self.client.prepare_request(prompt)
         
-        # APIを呼び出し
-        response = await self.client.call_api(request)
+        # APIを呼び出し（同期関数なのでawaitは使わない）
+        response = self.client.call_api(request)
         
         # 応答を処理
         script = self.process_response(response)
         
         # 出力先が指定されていれば保存（実際の実装時はFileUtilsを使用）
         if output_path:
-            # from app.utils.file import FileUtils
-            # FileUtils.write_file(output_path, script)
+            # ディレクトリが存在しない場合は作成
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             pass
             
         return script
@@ -118,6 +133,7 @@ class ScriptGenerator(BaseGenerator):
             structure (Dict): コンテンツ構造情報
             article_content (str): 記事内容
             output_path (str, optional): 出力先パス. デフォルトはNone
+                                         Noneの場合はget_output_path()で自動生成
 
         Returns:
             str: 生成された台本のMarkdown
