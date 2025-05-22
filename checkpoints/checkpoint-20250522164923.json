@@ -1,0 +1,11 @@
+{
+  "id": "checkpoint-20250522164923",
+  "type": "INITIAL",
+  "timestamp": "2025-05-22T16:49:23.966474",
+  "state": {
+    "input_path": "/Users/kazuki_nomiya/Work/develogon/til/web/【最速理解】WebAPIの基本とGOでの実装例/text.md",
+    "stage": "INITIALIZED"
+  },
+  "completed_tasks": [],
+  "pending_tasks": []
+}

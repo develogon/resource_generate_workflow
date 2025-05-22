@@ -1,0 +1,13 @@
+{
+  "id": "checkpoint-20250522172551",
+  "type": "ERROR",
+  "timestamp": "2025-05-22T17:25:51.878523",
+  "state": {
+    "error": "object Message can't be used in 'await' expression",
+    "context": {
+      "task_id": "task-009"
+    }
+  },
+  "completed_tasks": [],
+  "pending_tasks": []
+}

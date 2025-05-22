@@ -40,8 +40,8 @@ s3:
 # Slack設定
 slack:
   webhook_url: ""
-  channel: "#notifications"
-  username: "リソース生成ワークフロー"
+  channel: "#general"
+  username: "resource-generate-workflow"
   icon_emoji: ":robot_face:"
 
 # プロンプト設定

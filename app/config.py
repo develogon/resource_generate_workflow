@@ -13,12 +13,34 @@ import json
 import yaml
 import logging
 from typing import Dict, Any, Optional
+from pathlib import Path
+from dotenv import load_dotenv
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
 
 # デフォルト設定ファイルのパス
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.default.yaml")
+
+# .envファイルのパスを定義
+ENV_FILE_PATHS = [
+    ".env",
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"),
+    os.path.expanduser("~/.resource-workflow/.env")
+]
+
+def _load_dotenv():
+    """
+    .envファイルから環境変数を読み込む
+    """
+    for env_path in ENV_FILE_PATHS:
+        if os.path.exists(env_path):
+            logger.info(f".envファイルを読み込みます: {env_path}")
+            load_dotenv(env_path)
+            return True
+    
+    logger.debug(".envファイルが見つかりませんでした")
+    return False
 
 
 def load_default_config() -> Dict[str, Any]:
@@ -220,6 +242,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: 読み込まれた設定
     """
+    # .envファイルから環境変数を読み込む
+    _load_dotenv()
+    
     # デフォルト設定をベースにする
     config = load_default_config()
     

@@ -1,0 +1,11 @@
+{
+  "id": "checkpoint-20250522162711",
+  "type": "TASK",
+  "timestamp": "2025-05-22T16:27:11.348706",
+  "state": {
+    "last_completed_task": "task-001",
+    "task_type": "FILE_OPERATION"
+  },
+  "completed_tasks": [],
+  "pending_tasks": []
+}

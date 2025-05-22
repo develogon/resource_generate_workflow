@@ -1,0 +1,11 @@
+{
+  "id": "checkpoint-20250522170321",
+  "type": "TASK",
+  "timestamp": "2025-05-22T17:03:21.965192",
+  "state": {
+    "last_completed_task": "task-023",
+    "task_type": "API_CALL"
+  },
+  "completed_tasks": [],
+  "pending_tasks": []
+}
