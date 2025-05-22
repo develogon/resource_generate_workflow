@@ -606,6 +606,62 @@ resource-generate-workflow/
 └── examples/                  # 使用例
 ```
 
+### 8.0.1 テスト構成
+```
+tests/
+├── unit/                      # ユニットテスト
+│   ├── workflow/              # ワークフローエンジン関連テスト
+│   │   ├── test_engine.py
+│   │   ├── test_task_manager.py
+│   │   └── test_checkpoint.py
+│   ├── processors/            # プロセッサ関連テスト
+│   │   ├── test_content.py
+│   │   ├── test_chapter.py
+│   │   ├── test_section.py
+│   │   ├── test_paragraph.py
+│   │   └── test_image.py
+│   ├── generators/            # ジェネレータ関連テスト
+│   │   ├── test_base.py
+│   │   ├── test_article.py
+│   │   ├── test_script.py
+│   │   ├── test_script_json.py
+│   │   ├── test_tweet.py
+│   │   ├── test_description.py
+│   │   └── test_thumbnail.py
+│   ├── clients/               # API連携クライアントテスト
+│   │   ├── test_claude.py
+│   │   ├── test_openai.py
+│   │   ├── test_github.py
+│   │   ├── test_s3.py
+│   │   └── test_slack.py
+│   └── utils/                 # ユーティリティテスト
+│       ├── test_markdown.py
+│       ├── test_file.py
+│       └── test_logger.py
+├── integration/               # インテグレーションテスト
+│   ├── test_workflow_processor.py
+│   ├── test_processor_generator.py
+│   ├── test_generator_client.py
+│   ├── test_checkpoint_recovery.py
+│   └── test_task_execution.py
+├── e2e/                       # エンドツーエンドテスト
+│   ├── test_full_workflow.py
+│   ├── test_error_recovery.py
+│   └── test_cli.py
+├── fixtures/                  # テスト用データ
+│   ├── markdown/              # テスト用Markdownファイル
+│   ├── images/                # テスト用画像ファイル
+│   ├── responses/             # モック用API応答
+│   └── checkpoints/           # テスト用チェックポイント
+├── mocks/                     # モックオブジェクト定義
+│   ├── claude_mock.py
+│   ├── github_mock.py
+│   ├── s3_mock.py
+│   └── slack_mock.py
+└── conftest.py                # pytest共通設定・フィクスチャ
+
+```
+
 ### 8.1 主要ディレクトリ説明
 
 #### app/processors/ と app/generators/ の責務分担
