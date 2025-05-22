@@ -1,84 +1,99 @@
 import pytest
+import pytest_asyncio
 import json
 from unittest.mock import patch, MagicMock
 
-# テスト対象のモジュールをインポート（まだ実装されていない場合はコメントアウト）
-# from app.generators.script_json import ScriptJsonGenerator
+# テスト対象のモジュールをインポート
+from app.generators.script_json import ScriptJsonGenerator
 
 class TestScriptJsonGenerator:
     """台本JSONジェネレータのテストクラス"""
     
-    @pytest.fixture
-    def script_json_generator(self):
+    @pytest_asyncio.fixture
+    async def script_json_generator(self):
         """テスト用の台本JSONジェネレータインスタンスを作成"""
-        # コメントアウトされているコードは、実際のクラスが実装された後に有効化する
-        # return ScriptJsonGenerator()
-        
-        # モックインスタンスを返す（クラスが実装されるまでの一時的な対応）
-        mock_generator = MagicMock()
-        
-        # prepare_prompt メソッドが呼ばれたときに実行される関数
-        mock_generator.prepare_prompt.side_effect = lambda structure, script, **kwargs: f"""
-# 台本JSON作成
-
-以下の台本を構造化されたJSONに変換してください。
-
-## 台本内容
-{script[:300]}... （省略）
-
-## JSONフォーマット
-{{
-  "title": "タイトル",
-  "scenes": [
-    {{
-      "characters": ["キャラクター名"],
-      "dialogs": [
-        {{
-          "character": "キャラクター名",
-          "line": "台詞内容"
-        }}
-      ]
-    }}
-  ]
-}}
-"""
-        
-        # process_response メソッドが呼ばれたときに実行される関数
-        mock_generator.process_response.side_effect = lambda response: """```json
+        return ScriptJsonGenerator()
+    
+    @pytest.fixture
+    def sample_structure_data(self):
+        """テスト用の構造データを作成"""
+        return {
+            "title": "メインタイトル",
+            "sections": [
+                {"title": "セクション1", "content": "セクション1の内容..."},
+                {"title": "セクション2", "content": "セクション2の内容..."}
+            ]
+        }
+    
+    def test_prepare_script_json_prompt(self, script_json_generator, sample_structure_data):
+        """台本JSON生成用プロンプト準備のテスト"""
+        # get_system_promptとget_message_promptをモック化
+        with patch.object(script_json_generator, 'get_system_prompt', return_value="モックシステムプロンプト") as mock_system, \
+             patch.object(script_json_generator, 'get_message_prompt', return_value="モックメッセージプロンプト{{SCRIPT_CONTENT}}") as mock_message:
+            
+            script_content = "# 台本：メインタイトル\n\n..."
+            
+            prompt = script_json_generator.prepare_prompt(script_content)
+            
+            # プロンプトが正しく生成されることを確認
+            assert prompt is not None
+            assert isinstance(prompt, str)
+            assert "台本のJSON変換" in prompt
+            assert "システムプロンプト" in prompt
+            assert "メッセージプロンプト" in prompt
+            assert "モックシステムプロンプト" in prompt
+            assert "モックメッセージプロンプト" in prompt
+            
+            # 正しいパラメータでモックメソッドが呼ばれたことを確認
+            mock_system.assert_called_once_with('script_json')
+            mock_message.assert_called_once_with('script_json')
+    
+    @pytest.mark.asyncio
+    async def test_generate_async(self, script_json_generator):
+        """非同期台本JSON生成のテスト"""
+        # モックの非同期メソッド定義
+        async def mock_call_api(request):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """```json
 {
   "title": "メインタイトル",
-  "scenes": [
-    {
-      "characters": ["MC", "EXPERT"],
-      "dialogs": [
-        {
-          "character": "MC",
-          "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"
-        },
-        {
-          "character": "EXPERT",
-          "line": "こんにちは。今日はこのテーマについて詳しく解説します。"
-        },
-        {
-          "character": "MC",
-          "line": "まず基本的なことから教えてください。"
-        },
-        {
-          "character": "EXPERT",
-          "line": "はい、まず最初に重要なポイントは..."
-        }
-      ]
-    }
+  "characters": [
+    {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
+    {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
+  ],
+  "script": [
+    {"type": "dialog", "speaker": "MC", "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"},
+    {"type": "dialog", "speaker": "EXPERT", "line": "こんにちは。今日はこのテーマについて詳しく解説します。"}
   ]
 }
 ```"""
+                    }
+                ]
+            }
         
-        return mock_generator
-    
-    def test_generate_script_json(self, script_json_generator, sample_structure_data):
-        """台本JSON生成のテスト"""
-        # このテストは、実際のクラスが実装された後に一部を有効化する
-        # generate_script_json メソッドの呼び出し
+        # クライアントのモック設定
+        mock_client = MagicMock()
+        mock_client.prepare_request.return_value = {"prompt": "テスト用プロンプト"}
+        mock_client.call_api = mock_call_api
+        mock_client.extract_content.return_value = """```json
+{
+  "title": "メインタイトル",
+  "characters": [
+    {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
+    {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
+  ],
+  "script": [
+    {"type": "dialog", "speaker": "MC", "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"},
+    {"type": "dialog", "speaker": "EXPERT", "line": "こんにちは。今日はこのテーマについて詳しく解説します。"}
+  ]
+}
+```"""
+        # モッククライアントを注入
+        script_json_generator.client = mock_client
+        
         script_content = """# 台本：メインタイトル
 
 ## 登場人物
@@ -90,122 +105,77 @@ class TestScriptJsonGenerator:
 MC: みなさんこんにちは！今回のテーマは「メインタイトル」です。
 
 EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
-
-MC: まず基本的なことから教えてください。
-
-EXPERT: はい、まず最初に重要なポイントは...
 """
         
-        script_json_generator.generate_script_json.return_value = """
-{
-  "title": "メインタイトル",
-  "scenes": [
-    {
-      "characters": ["MC", "EXPERT"],
-      "dialogs": [
-        {
-          "character": "MC",
-          "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"
-        },
-        {
-          "character": "EXPERT",
-          "line": "こんにちは。今日はこのテーマについて詳しく解説します。"
-        },
-        {
-          "character": "MC",
-          "line": "まず基本的なことから教えてください。"
-        },
-        {
-          "character": "EXPERT",
-          "line": "はい、まず最初に重要なポイントは..."
-        }
-      ]
-    }
-  ]
-}
-"""
-        
-        result = script_json_generator.generate_script_json(sample_structure_data, script_content)
+        # 非同期メソッドのテスト
+        result = await script_json_generator.generate(script_content)
         
         # 結果が正しいことを確認
         assert result is not None
-        assert "title" in result
-        assert "scenes" in result
+        assert isinstance(result, str)
         
-        # 文字列としてのレスポンスの場合
-        if isinstance(result, str):
-            # JSON形式であることを確認
-            try:
-                json_obj = json.loads(result)
-                assert "title" in json_obj
-                assert "scenes" in json_obj
-                assert len(json_obj["scenes"]) > 0
-                assert "dialogs" in json_obj["scenes"][0]
-            except json.JSONDecodeError:
-                assert False, "結果は有効なJSON形式ではありません"
+        # JSON形式であることを確認
+        try:
+            json_obj = json.loads(result)
+            assert "title" in json_obj
+            assert "characters" in json_obj
+            assert "script" in json_obj
+            assert len(json_obj["characters"]) == 2
+            assert len(json_obj["script"]) == 2
+            assert json_obj["characters"][0]["name"] == "MC"
+            assert json_obj["characters"][1]["name"] == "EXPERT"
+        except json.JSONDecodeError:
+            assert False, "結果は有効なJSON形式ではありません"
+        
+        # API呼び出しが行われたことを確認
+        mock_client.prepare_request.assert_called_once()
     
-    @patch("app.clients.claude.ClaudeAPIClient")
-    async def test_script_json_generation_with_api(self, mock_claude_client, script_json_generator, sample_structure_data):
-        """APIを使用した台本JSON生成のテスト"""
-        # このテストは、実際のクラスが実装された後に有効化する
-        # mock_client_instance = mock_claude_client.return_value
-        # mock_client_instance.call_api.return_value = {
-        #     "content": [
-        #         {
-        #             "type": "text",
-        #             "text": """```json
-        # {
-        #   "title": "メインタイトル",
-        #   "scenes": [
-        #     {
-        #       "characters": ["MC", "EXPERT"],
-        #       "dialogs": [
-        #         {
-        #           "character": "MC",
-        #           "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"
-        #         },
-        #         {
-        #           "character": "EXPERT",
-        #           "line": "こんにちは。今日はこのテーマについて詳しく解説します。"
-        #         }
-        #       ]
-        #     }
-        #   ]
-        # }
-        # ```"""
-        #         }
-        #     ]
-        # }
-        # 
-        # script_content = "# 台本：メインタイトル\n\n..."
-        # 
-        # result = await script_json_generator.generate(sample_structure_data, script_content)
-        # 
-        # # 結果が正しいことを確認
-        # assert result is not None
-        # 
-        # # 文字列としてのレスポンスの場合
-        # if isinstance(result, str):
-        #     # JSON形式であることを確認
-        #     try:
-        #         json_obj = json.loads(result)
-        #         assert "title" in json_obj
-        #     except json.JSONDecodeError:
-        #         assert False, "結果は有効なJSON形式ではありません"
-        # 
-        # # API呼び出しが行われたことを確認
-        # mock_client_instance.call_api.assert_called_once()
-        pass
-    
-    def test_prepare_script_json_prompt(self, script_json_generator, sample_structure_data):
-        """台本JSON生成用プロンプト準備のテスト"""
-        script_content = "# 台本：メインタイトル\n\n..."
+    def test_generate_script_json(self, script_json_generator, monkeypatch):
+        """同期版台本JSON生成のテスト"""
+        # モックレスポンス用のJSON文字列
+        expected_result = json.dumps({
+            "title": "メインタイトル",
+            "characters": [
+                {"name": "MC", "display_name": "司会者", "description": "番組の進行役"},
+                {"name": "EXPERT", "display_name": "専門家", "description": "技術の専門家"}
+            ],
+            "script": [
+                {"type": "dialog", "speaker": "MC", "line": "みなさんこんにちは！今回のテーマは「メインタイトル」です。"},
+                {"type": "dialog", "speaker": "EXPERT", "line": "こんにちは。今日はこのテーマについて詳しく解説します。"}
+            ]
+        }, ensure_ascii=False, indent=2)
         
-        prompt = script_json_generator.prepare_prompt(sample_structure_data, script_content)
+        # モック化して同期メソッドが非同期メソッドを呼び出すことをシミュレート
+        async def mock_generate(*args, **kwargs):
+            return expected_result
         
-        # プロンプトが正しく生成されることを確認
-        assert prompt is not None
-        assert isinstance(prompt, str)
-        assert "台本JSON作成" in prompt
-        assert "台本内容" in prompt
-        assert "JSONフォーマット" in prompt 
+        # 非同期メソッドをモック
+        monkeypatch.setattr(script_json_generator, 'generate', mock_generate)
+        
+        script_content = """# 台本：メインタイトル
+
+## 登場人物
+- 司会者（MC）：番組の進行役
+- 専門家（EXPERT）：技術の専門家
+
+## 台本
+
+MC: みなさんこんにちは！今回のテーマは「メインタイトル」です。
+
+EXPERT: こんにちは。今日はこのテーマについて詳しく解説します。
+"""
+        
+        # 同期メソッドのテスト
+        result = script_json_generator.generate_script_json(script_content)
+        
+        # 結果が正しいことを確認
+        assert result == expected_result
+        
+        # JSON形式であることを確認
+        try:
+            json_obj = json.loads(result)
+            assert "title" in json_obj
+            assert "characters" in json_obj
+            assert "script" in json_obj
+        except json.JSONDecodeError:
+            assert False, "結果は有効なJSON形式ではありません" 
