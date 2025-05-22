@@ -19,7 +19,7 @@
 以下の形式でYAMLを出力してください。
 
 ```yaml
-{{section_structure_template}}
+{{structure_template}}
 ```
 
 ## 具体的なガイドライン

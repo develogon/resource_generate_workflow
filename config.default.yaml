@@ -53,7 +53,7 @@ prompts:
 templates:
   thumbnail_template: templates/thumbnail_template.yaml
   description_template: templates/description_template.md
-  section_structure_template: templates/section_structure_template.yml
+  structure_template: templates/structure_template.yml
 
 # 処理設定
 processing:

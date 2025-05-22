@@ -114,7 +114,7 @@ class TestCheckpointResumeWorkflow:
 - 項目2
 - 項目3""")
         
-        with open(section1_1_dir / "section_structure.yaml", "w") as f:
+        with open(section1_1_dir / "structure.yaml", "w") as f:
             f.write("""title: "1.1 基本概念"
 paragraphs:
   - type: "heading"

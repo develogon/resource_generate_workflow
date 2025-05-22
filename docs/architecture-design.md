@@ -5,12 +5,13 @@
 このシステムは、Markdown形式のテキストコンテンツ（`text.md`）を入力として、以下の処理を行うワークフローエンジンです：
 
 1. コンテンツを章（Chapter）とセクション（Section）に分割
-2. Claude APIを使用して各セクションの構造を解析
-3. 記事（Article）、台本（Script）、ツイート（Tweets）などの派生コンテンツを生成
-4. 画像処理（SVG、DrawIO XML、Mermaid図の変換と最適化）
-5. OpenAI APIを使用したサムネイル画像の生成
-6. 生成したリソースをGitHubにコミットしS3にアップロード
-7. 処理の各段階でチェックポイントを保存し、中断時に再開可能な設計
+2. Claude APIを使用して各セクションの構造を解析し、パラグラフ構造を含むYAML形式で出力
+3. セクション構造をパラグラフ単位に分割
+4. 各パラグラフごとに記事（Article）、台本（Script）、台本JSON（Script JSON）などの派生コンテンツを生成
+5. 画像処理（SVG、DrawIO XML、Mermaid図の変換と最適化）
+6. OpenAI APIを使用したサムネイル画像の生成
+7. 生成したリソースをGitHubにコミットしS3にアップロード
+8. 処理の各段階でチェックポイントを保存し、中断時に再開可能な設計
 
 このシステムはCLIとして実装され、バッチ処理や自動化パイプラインで利用できるよう設計されています。
 
@@ -94,35 +95,45 @@ SVG、DrawIO XML、Mermaid記法で書かれた図をPNG形式に変換し、S3�
 flowchart TD
     InputMD[text.md] --> ChapterSplit[Chapterに分割]
     ChapterSplit --> SectionSplit[Sectionに分割]
-    SectionSplit --> StructureAnalysis[構造解析]
-    StructureAnalysis --> ContentProcessed[構造化データ]
+    SectionSplit --> StructureAnalysis[セクション構造解析]
+    StructureAnalysis --> SectionStructureYaml[セクション構造Yaml]
+    SectionStructureYaml --> ParagraphSplit[パラグラフに分割]
+    ParagraphSplit --> ParagraphStructures[パラグラフごとの構造]
+
+    ParagraphStructures --> GeneratorSystem{ジェネレータシステム}
     
-    ContentProcessed --> GeneratorSystem{ジェネレータシステム}
-    
-    GeneratorSystem --> ArticleGen[記事生成]
-    GeneratorSystem --> ScriptGen[台本生成]
-    GeneratorSystem --> TweetGen[ツイート生成]
-    GeneratorSystem --> DescGen[説明文生成]
-    
+    GeneratorSystem --> ArticleGen[パラグラフごとの記事生成]
     ArticleGen --> ImgProcess[画像処理]
     ImgProcess --> S3Upload[S3アップロード]
-    
+    GeneratorSystem --> ScriptGen[パラグラフごとの台本生成]
+    GeneratorSystem --> ScriptJsonGen[パラグラフごとの台本JSON生成]
+    ArticleGen & ScriptGen & ScriptJsonGen --> ParagraphContents[パラグラフコンテンツ]
+
+    ParagraphContents --> SectionMerge[セクション単位で結合]
+    SectionMerge --> TweetGen[ツイート生成]
+
+    SectionMerge --> ChapterMerge[チャプター単位で結合]
+    ChapterMerge --> DescGen[説明文生成]
     DescGen --> DescOutput[description.md]
     DescOutput --> ThumbnailGen[サムネイル生成]
     ThumbnailGen --> OptimizeTemplate[GPT-4o-mini YAML最適化]
     OptimizeTemplate --> OpenAIImgGen[GPT-Image-1 画像生成]
     OpenAIImgGen --> S3Upload
     
-    ArticleGen & ScriptGen & TweetGen & DescGen --> ContentMerge[コンテンツ結合]
+    ChapterMerge & TweetGen & DescGen --> ContentMerge[コンテンツ結合]
     ContentMerge --> GitHubPush[GitHubにPush]
     ContentMerge --> FinalOutput[最終成果物]
     
     style InputMD fill:#f9f
-    style ContentProcessed fill:#bfb
+    style SectionStructureYaml fill:#bfa
+    style ParagraphStructures fill:#abf
     style GeneratorSystem fill:#fbb
     style DescOutput fill:#afa
     style OpenAIImgGen fill:#f9a
     style FinalOutput fill:#9f9
+    style ParagraphContents fill:#aff
+    style SectionMerge fill:#daf
+    style ChapterMerge fill:#fda
 ```
 
 ### 3.2 プロセッサとジェネレータの連携
@@ -158,29 +169,43 @@ title/
 │   ├── text.md
 │   ├── section1/
 │   │   ├── text.md
-│   │   ├── section_structure.yaml
-│   │   ├── article.md
-│   │   ├── script.md
-│   │   ├── script.json
+│   │   ├── structure.yaml      # パラグラフ構造を含むセクション全体の構造Markdown
+│   │   ├── paragraph1/
+│   │   │   ├── text.md
+│   │   │   ├── structure.md  # セクション構造から分割された単一パラグラフの構造
+│   │   │   ├── article.md
+│   │   │   ├── script.md
+│   │   │   ├── script.json
+│   │   │   └── images/
+│   │   ├── paragraph2/
+│   │   │   ├── text.md
+│   │   │   ├── structure.md
+│   │   │   ├── article.md
+│   │   │   ├── script.md
+│   │   │   ├── script.json
+│   │   │   └── images/
+│   │   ├── article.md        # パラグラフごとの記事を結合
+│   │   ├── script.md         # パラグラフごとの台本を結合
+│   │   ├── script.json       # パラグラフごとの台本JSONを結合
 │   │   ├── tweets.csv
 │   │   └── images/
 │   ├── section2/
 │   │   └── ...
-│   ├── text.md
-│   ├── article.md
-│   ├── script.md
-│   ├── script.json
+│   ├── article.md            # セクションごとの記事を結合
+│   ├── script.md             # セクションごとの台本を結合
+│   ├── script.json           # セクションごとの台本JSONを結合
 │   ├── tweets.csv
 │   └── images/
 ├── chapter2/
 │   └── ...
 ├── text.md
-├── article.md
-├── script.md
+├── article.md                # チャプターごとの記事を結合
+├── script.md                 # チャプターごとの台本を結合
+├── script.json               # チャプターごとの台本JSONを結合
 ├── tweets.csv
 ├── structure.md
 ├── description.md
-└── images/
+├── images/
 └── thumbnail/
     └── ...
 ```
@@ -271,16 +296,20 @@ class ContentProcessor:
         """チャプターコンテンツをセクションに分割"""
         pass
         
-    def analyze_structure(self, section_content: str, images: List[Image] = None) -> Dict:
-        """セクションの構造を解析"""
+    def analyze_structure(self, section_content: str, images: List[Image] = None) -> str:
+        """セクションの構造を解析し、パラグラフ構造を含むMarkdown形式で出力"""
+        pass
+    
+    def split_structure_to_paragraphs(self, structure_md: str) -> List[Dict]:
+        """セクション構造Markdownを論理的なパラグラフに分割"""
         pass
     
     def extract_metadata(self, content: str) -> Dict:
         """コンテンツからメタデータを抽出"""
         pass
         
-    def combine_contents(self, contents: List[str], content_type: str) -> str:
-        """複数のコンテンツを結合"""
+    def combine_contents(self, contents: List[str], content_type: str, level: str = "paragraph") -> str:
+        """複数のコンテンツを結合。levelはparagraph, section, chapterのいずれか"""
         pass
 ```
 
@@ -292,7 +321,7 @@ AIを活用したコンテンツ生成を行います。
 class BaseGenerator:
     """ジェネレータの基底クラス"""
     
-    def prepare_prompt(self, structure: Dict, additional_context: Dict = None) -> str:
+    def prepare_prompt(self, structure_md: str, additional_context: Dict = None) -> str:
         """プロンプトの準備"""
         pass
     
@@ -307,36 +336,36 @@ class BaseGenerator:
 class ArticleGenerator(BaseGenerator):
     """記事生成器"""
     
-    def generate_article(self, structure: Dict, section_content: str) -> str:
-        """構造情報から記事を生成"""
+    def generate_article(self, paragraph_structure_md: str, paragraph_content: str) -> str:
+        """パラグラフ構造情報から記事を生成"""
         pass
 
 class ScriptGenerator(BaseGenerator):
     """台本生成器"""
     
-    def generate_script(self, structure: Dict, article: str) -> str:
-        """構造情報と記事から台本を生成"""
+    def generate_script(self, paragraph_structure_md: str, article: str) -> str:
+        """パラグラフ構造情報と記事から台本を生成"""
         pass
 
 class ScriptJsonGenerator(BaseGenerator):
     """台本JSON生成器"""
     
-    def generate_script_json(self, structure: Dict, script: str) -> Dict:
-        """台本からJSON形式の台本を生成"""
+    def generate_script_json(self, paragraph_structure_md: str, script: str) -> Dict:
+        """パラグラフの台本からJSON形式の台本を生成"""
         pass
 
 class TweetGenerator(BaseGenerator):
     """ツイート生成器"""
     
-    def generate_tweets(self, structure: Dict, article: str) -> List[str]:
-        """構造情報と記事からツイートを生成"""
+    def generate_tweets(self, section_contents: Dict, merged_article: str) -> List[str]:
+        """セクション結合後の記事からツイートを生成"""
         pass
 
 class DescriptionGenerator(BaseGenerator):
     """説明文生成器"""
     
-    def generate_description(self, structure_md: str, article: str) -> str:
-        """構造情報と記事から説明文を生成"""
+    def generate_description(self, chapter_contents: Dict, merged_article: str) -> str:
+        """チャプター結合後の記事から説明文を生成"""
         pass
 
 class ThumbnailGenerator(BaseGenerator):
@@ -602,7 +631,7 @@ resource-generate-workflow/
 ├── templates/                 # 出力テンプレート
 │   ├── thumbnail_template.yaml   # サムネイル用テンプレート
 │   ├── description_template.md  # 説明文用テンプレート
-│   └── section_structure_template.yml # セクション構造用テンプレート
+│   └── structure_template.md # セクション構造用テンプレート
 └── examples/                  # 使用例
 ```
 
@@ -685,7 +714,7 @@ Claude API呼び出し用のプロンプトテンプレートを格納します�
 
 - **system/**: AIの基本動作を制御するシステムプロンプト
   - 出力形式や品質の一貫性を確保
-  - モデルの全体的な振る舞いを定義
+  - モデル全体の振る舞いを定義
 
 - **message/**: 具体的な指示を含むメッセージプロンプト
   - 特定のタスクに関する詳細な指示
@@ -701,8 +730,10 @@ Claude API呼び出し用のプロンプトテンプレートを格納します�
 - **description_template.md**: 説明文生成の基本テンプレート
   - マーケティング情報や定型文を含む
 
-- **section_structure_template.yml**: セクション構造の標準テンプレート
-  - コンテンツ生成の基本構造を定義
+- **structure_template.md**: セクション構造の標準テンプレート
+  - セクション全体の構造を複数のパラグラフ単位で整理
+  - 各パラグラフには内容焦点、原文保持要素、説明パート、コードパート、図解パートなどの詳細情報を含む
+  - structure_template.mdのような形式
 
 ## 9. セキュリティ考慮事項
 

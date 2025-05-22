@@ -47,7 +47,7 @@ class SectionProcessor:
         self.logger.debug(f"セクションコンテンツを書き込み: {section_file}")
         return section_file
     
-    def write_section_structure(self, section_dir: str, structure: Dict) -> str:
+    def write_structure(self, section_dir: str, structure: Dict) -> str:
         """セクション構造情報をYAMLファイルに書き込む
         
         Args:
@@ -57,7 +57,7 @@ class SectionProcessor:
         Returns:
             str: 作成されたファイルのパス
         """
-        structure_file = os.path.join(section_dir, "section_structure.yaml")
+        structure_file = os.path.join(section_dir, "structure.yaml")
         
         with open(structure_file, "w", encoding="utf-8") as f:
             yaml.dump(structure, f, default_flow_style=False, allow_unicode=True)

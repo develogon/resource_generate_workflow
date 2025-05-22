@@ -57,21 +57,25 @@ graph TB
     CheckHasImages -->|No| SkipImageProcess[画像処理をスキップ]
     
     %% 段落構造作成
-    SectionLoop --> CreateStructure[section_structure.yaml作成]
+    SectionLoop --> CreateStructure[structure.yaml作成]
     CreateStructure --> PrepareClaudeReq[Claude API用リクエスト準備]
     PrepareClaudeReq --> CheckEncodedImages{エンコード画像あり?}
     CheckEncodedImages -->|Yes| IncludeImagesInPrompt[画像をプロンプトに含める]
     IncludeImagesInPrompt --> RegisterClaudeApiCall1[Claude API呼び出しタスク登録]
     RegisterClaudeApiCall1 --> CallClaudeApi1[Claude APIを呼び出し]
     CheckEncodedImages -->|No| RegisterClaudeApiCall1
-    CallClaudeApi1 --> ExtractYaml[YAMLを抽出]
-    ExtractYaml --> WriteStructureYaml[section_structure.yamlに書き込み]
+    CallClaudeApi1 --> ExtractYaml[パラグラフ構造Yamlを抽出]
+    ExtractYaml --> WriteStructureYaml[structure.yamlに書き込み]
     WriteStructureYaml --> RegisterGitHubPushStructureTask[GitHubプッシュタスク登録]
     RegisterGitHubPushStructureTask --> GitHubPushStructure[GitHubにpush]
     GitHubPushStructure --> SaveStructureCheckpoint[構造作成チェックポイント保存]
     
+    %% セクション構造をパラグラフに分割
+    GitHubPushStructure --> SplitStructureToParas[structure.yamlをパラグラフに分割]
+    SplitStructureToParas --> SaveSplitParasCheckpoint[パラグラフ分割チェックポイント保存]
+    
     %% Paragraph処理ループ
-    GitHubPushStructure --> ParagraphLoop{各paragraphごとの処理}
+    SaveSplitParasCheckpoint --> ParagraphLoop{各paragraphごとの処理}
     
     %% 記事生成
     ParagraphLoop --> CreateArticle[article.md作成]
@@ -147,17 +151,6 @@ graph TB
     RegisterGitHubPushScriptJsonTask --> GitHubPushScriptJson[GitHubにpush]
     GitHubPushScriptJson --> SaveScriptJsonCheckpoint[台本JSON作成チェックポイント保存]
     
-    %% ツイート作成
-    ParagraphLoop --> CreateTweets[tweets.csv作成]
-    CreateTweets --> GetTweetsPrompt[tweets作成用プロンプト取得]
-    GetTweetsPrompt --> RegisterClaudeApiCall5[Claude API呼び出しタスク登録]
-    RegisterClaudeApiCall5 --> CallClaudeApi5[Claude APIを呼び出し]
-    CallClaudeApi5 --> ExtractTweetsCsv[CSVを抽出]
-    ExtractTweetsCsv --> WriteTweetsCsv[tweets.csvに書き込み]
-    WriteTweetsCsv --> RegisterGitHubPushTweetsTask[GitHubプッシュタスク登録]
-    RegisterGitHubPushTweetsTask --> GitHubPushTweets[GitHubにpush]
-    GitHubPushTweets --> SaveTweetsCheckpoint[ツイート作成チェックポイント保存]
-    
     %% Sectionのコンテンツ結合
     SectionLoop --> EndSectionProcess[section処理完了]
     EndSectionProcess --> CombineSectionContents[sectionのコンテンツ結合]
@@ -167,8 +160,18 @@ graph TB
     CombineSectionContents --> CombineSectionArticles[各sectionのarticle.mdを結合]
     CombineSectionContents --> CombineSectionScripts[各sectionのscript.mdを結合]
     CombineSectionContents --> CombineSectionScriptJSONs[各sectionのscript.jsonを結合]
-    CombineSectionContents --> CombineSectionTweets[各sectionのtweets.csvを結合]
     CombineSectionContents --> CombineSectionImages[各sectionのimagesフォルダを結合]
+    
+    %% ツイート作成（セクション結合後）
+    SaveSectionCombineCheckpoint --> CreateTweets[tweets.csv作成]
+    CreateTweets --> GetTweetsPrompt[tweets作成用プロンプト取得]
+    GetTweetsPrompt --> RegisterClaudeApiCall5[Claude API呼び出しタスク登録]
+    RegisterClaudeApiCall5 --> CallClaudeApi5[Claude APIを呼び出し]
+    CallClaudeApi5 --> ExtractTweetsCsv[CSVを抽出]
+    ExtractTweetsCsv --> WriteTweetsCsv[tweets.csvに書き込み]
+    WriteTweetsCsv --> RegisterGitHubPushTweetsTask[GitHubプッシュタスク登録]
+    RegisterGitHubPushTweetsTask --> GitHubPushTweets[GitHubにpush]
+    GitHubPushTweets --> SaveTweetsCheckpoint[ツイート作成チェックポイント保存]
     
     %% GitHub Push
     CombineSectionArticles --> RegisterGitHubPushCombinedArticleTask[GitHubプッシュタスク登録]
@@ -177,8 +180,6 @@ graph TB
     RegisterGitHubPushCombinedScriptTask --> GitHubPushCombinedScript[GitHubにpush]
     CombineSectionScriptJSONs --> RegisterGitHubPushCombinedJsonTask[GitHubプッシュタスク登録]
     RegisterGitHubPushCombinedJsonTask --> GitHubPushCombinedJson[GitHubにpush]
-    CombineSectionTweets --> RegisterGitHubPushCombinedTweetsTask[GitHubプッシュタスク登録]
-    RegisterGitHubPushCombinedTweetsTask --> GitHubPushCombinedTweets[GitHubにpush]
     CombineSectionImages --> RegisterGitHubPushCombinedImagesTask[GitHubプッシュタスク登録]
     RegisterGitHubPushCombinedImagesTask --> GitHubPushCombinedImages[GitHubにpush]
     
@@ -210,8 +211,8 @@ graph TB
     RegisterGitHubPushStructureMdTask --> GitHubPushStructureMd[GitHubにpush]
     GitHubPushStructureMd --> SaveStructureMdCheckpoint[構造ファイルチェックポイント保存]
     
-    %% Description作成
-    GitHubPushStructureMd --> CreateDescription[description作成]
+    %% Description作成（チャプター結合後）
+    SaveChapterCombineCheckpoint --> CreateDescription[description作成]
     CreateDescription --> GetDescriptionPrompt[description用プロンプト取得]
     GetDescriptionPrompt --> RegisterClaudeApiCall6[Claude API呼び出しタスク登録]
     RegisterClaudeApiCall6 --> CallClaudeApi6[Claude APIを呼び出し]
@@ -222,8 +223,8 @@ graph TB
     RegisterGitHubPushDescriptionTask --> GitHubPushDescription[GitHubにpush]
     GitHubPushDescription --> SaveDescriptionCheckpoint[説明文作成チェックポイント保存]
 
-    %% Thumbnail作成
-    GitHubPushStructureMd --> CreateThumbnail[thumbnail作成]
+    %% Thumbnail作成（チャプター結合後）
+    SaveChapterCombineCheckpoint --> CreateThumbnail[thumbnail作成]
     CreateThumbnail --> ReadDescriptionMd[description.mdを読み込み]
     ReadDescriptionMd --> LoadTemplateYaml[thumbnail_template.yamlを読み込み]
     LoadTemplateYaml --> RegisterOpenAIGPT4Call[OpenAI GPT-4o-mini呼び出しタスク登録]
@@ -270,9 +271,9 @@ graph TB
     class CallClaudeApi1,CallClaudeApi2,CallClaudeApi3,CallClaudeApi4,CallClaudeApi5,CallClaudeApi6 api;
     class CallOpenAIGPT4,CallOpenAIImage openai;
     class GitHubPushChapter,GitHubPushSection,GitHubPushEncodedImg,GitHubPushStructure,GitHubPushArticle,GitHubPushImgProcessed1,GitHubPushImgProcessed2,GitHubPushImgProcessed3,GitHubPushScript,GitHubPushScriptJson,GitHubPushTweets,GitHubPushCombinedArticle,GitHubPushCombinedScript,GitHubPushCombinedJson,GitHubPushCombinedTweets,GitHubPushCombinedImages,GitHubPushTitleArticle,GitHubPushTitleScript,GitHubPushTitleTweets,GitHubPushTitleImages,GitHubPushStructureMd,GitHubPushDescription,GitHubPushThumbnail github;
-    class SplitChapters,CreateChapterFolder,WriteChapterContent,SplitSections,CreateSectionFolder,WriteSectionContent,ProcessImages,EncodeImages,ReplaceImageInMd,CreateStructure,PrepareClaudeReq,ExtractYaml,WriteStructureYaml,CreateArticle,GetArticlePrompt,ExtractArticleMd,WriteArticleMd,ProcessArticleImages,ExtractSvg,ConvertSvgToPng,SaveToImagesFolder1,UploadToS31,ReplaceWithLink1,ExtractXml,ConvertXmlToPng,SaveToImagesFolder2,UploadToS32,ReplaceWithLink2,ExtractMermaid,ConvertMermaidToPng,SaveToImagesFolder3,UploadToS33,ReplaceWithLink3,CreateScript,GetScriptPrompt,ExtractScriptMd,WriteScriptMd,CreateScriptJson,GetScriptJsonPrompt,ExtractScriptJson,WriteScriptJson,CreateTweets,GetTweetsPrompt,ExtractTweetsCsv,WriteTweetsCsv,CombineSectionContents,CombineSectionArticles,CombineSectionScripts,CombineSectionScriptJSONs,CombineSectionTweets,CombineSectionImages,CombineChapterContents,CombineChapterArticles,CombineChapterScripts,CombineChapterTweets,CombineChapterImages,CreateStructureMd,WriteStructureMd,CreateDescription,GetDescriptionPrompt,ExtractDescriptionMd,WriteDescriptionMd,AppendDescriptionTemplate,CreateThumbnail,ReadDescriptionMd,LoadTemplateYaml,OptimizeTemplate,SaveThumbnailImage,LogAPIUsage,UploadThumbnailToS3,ExecuteTask,UpdateProgress,SkipTask,GetNextTask,ResumeProcess,FinalizeProcess,UseSpecifiedPath,UseDefaultPath process;
+    class SplitChapters,CreateChapterFolder,WriteChapterContent,SplitSections,CreateSectionFolder,WriteSectionContent,ProcessImages,EncodeImages,ReplaceImageInMd,CreateStructure,PrepareClaudeReq,ExtractMd,WriteStructureMd,SplitStructureToParas,CreateArticle,GetArticlePrompt,ExtractArticleMd,WriteArticleMd,ProcessArticleImages,ExtractSvg,ConvertSvgToPng,SaveToImagesFolder1,UploadToS31,ReplaceWithLink1,ExtractXml,ConvertXmlToPng,SaveToImagesFolder2,UploadToS32,ReplaceWithLink2,ExtractMermaid,ConvertMermaidToPng,SaveToImagesFolder3,UploadToS33,ReplaceWithLink3,CreateScript,GetScriptPrompt,ExtractScriptMd,WriteScriptMd,CreateScriptJson,GetScriptJsonPrompt,ExtractScriptJson,WriteScriptJson,CreateTweets,GetTweetsPrompt,ExtractTweetsCsv,WriteTweetsCsv,CombineSectionContents,CombineSectionArticles,CombineSectionScripts,CombineSectionScriptJSONs,CombineSectionTweets,CombineSectionImages,CombineChapterContents,CombineChapterArticles,CombineChapterScripts,CombineChapterTweets,CombineChapterImages,CreateStructureMd,WriteStructureMd,CreateDescription,GetDescriptionPrompt,ExtractDescriptionMd,WriteDescriptionMd,AppendDescriptionTemplate,CreateThumbnail,ReadDescriptionMd,LoadTemplateYaml,OptimizeTemplate,SaveThumbnailImage,LogAPIUsage,UploadThumbnailToS3,ExecuteTask,UpdateProgress,SkipTask,GetNextTask,ResumeProcess,FinalizeProcess,UseSpecifiedPath,UseDefaultPath process;
     class ChapterLoop,SectionLoop,CheckHasImages,CheckEncodedImages,ParagraphLoop,CheckArticleImages,CheckImageType,ErrorHandler,CheckResumeFlag,CheckTaskCompleted,CheckMoreTasks,CheckInputPath,CheckAllProcessed decision;
     class Start,NotifySlack,NotifySlackError start;
-    class SaveInitialCheckpoint,SaveChapterCheckpoint,SaveSectionCheckpoint,SaveStructureCheckpoint,SaveArticleCheckpoint,SaveImageProcessedCheckpoint1,SaveImageProcessedCheckpoint2,SaveImageProcessedCheckpoint3,SaveScriptCheckpoint,SaveScriptJsonCheckpoint,SaveTweetsCheckpoint,SaveSectionCombineCheckpoint,SaveChapterCombineCheckpoint,SaveStructureMdCheckpoint,SaveDescriptionCheckpoint,SaveThumbnailCheckpoint,SaveErrorCheckpoint,SaveTaskCheckpoint,LoadCheckpoint checkpoint;
+    class SaveInitialCheckpoint,SaveChapterCheckpoint,SaveSectionCheckpoint,SaveSplitParasCheckpoint,SaveStructureCheckpoint,SaveArticleCheckpoint,SaveImageProcessedCheckpoint1,SaveImageProcessedCheckpoint2,SaveImageProcessedCheckpoint3,SaveScriptCheckpoint,SaveScriptJsonCheckpoint,SaveTweetsCheckpoint,SaveSectionCombineCheckpoint,SaveChapterCombineCheckpoint,SaveStructureMdCheckpoint,SaveDescriptionCheckpoint,SaveThumbnailCheckpoint,SaveErrorCheckpoint,SaveTaskCheckpoint,LoadCheckpoint checkpoint;
     class RegisterInitialTasks,RegisterGitHubPushTask,RegisterGitHubPushSectionTask,RegisterGitHubPushImgTask,RegisterClaudeApiCall1,RegisterGitHubPushStructureTask,RegisterClaudeApiCall2,RegisterGitHubPushArticleTask,RegisterS3UploadTask1,RegisterGitHubPushImgTask1,RegisterS3UploadTask2,RegisterGitHubPushImgTask2,RegisterS3UploadTask3,RegisterGitHubPushImgTask3,RegisterClaudeApiCall3,RegisterGitHubPushScriptTask,RegisterClaudeApiCall4,RegisterGitHubPushScriptJsonTask,RegisterClaudeApiCall5,RegisterGitHubPushTweetsTask,RegisterGitHubPushCombinedArticleTask,RegisterGitHubPushCombinedScriptTask,RegisterGitHubPushCombinedJsonTask,RegisterGitHubPushCombinedTweetsTask,RegisterGitHubPushCombinedImagesTask,RegisterGitHubPushTitleArticleTask,RegisterGitHubPushTitleScriptTask,RegisterGitHubPushTitleTweetsTask,RegisterGitHubPushTitleImagesTask,RegisterGitHubPushStructureMdTask,RegisterClaudeApiCall6,RegisterGitHubPushDescriptionTask,RegisterOpenAIGPT4Call,RegisterOpenAIImageCall,RegisterS3UploadThumbnailTask,RegisterGitHubPushThumbnailTask register;
 ```

@@ -81,15 +81,15 @@ class TestSectionProcessor:
     
     @patch("builtins.open", new_callable=mock_open)
     @patch("yaml.dump")
-    def test_write_section_structure(self, mock_yaml_dump, mock_file, section_processor, sample_structure_data, tmp_path):
+    def test_write_structure(self, mock_yaml_dump, mock_file, section_processor, sample_structure_data, tmp_path):
         """セクション構造書き込みのテスト"""
         section_dir = tmp_path / "1_1_基本概念"
         section_dir.mkdir()
         
-        structure_file = section_processor.write_section_structure(str(section_dir), sample_structure_data)
+        structure_file = section_processor.write_structure(str(section_dir), sample_structure_data)
         
         # 実際のインスタンスを使用する場合（コメントアウトされたコードを使用）
-        # structure_file = section_processor.write_section_structure(section_dir, sample_structure_data)
+        # structure_file = section_processor.write_structure(section_dir, sample_structure_data)
         # assert os.path.exists(structure_file)
         # 
         # with open(structure_file, "r") as f:
@@ -98,11 +98,11 @@ class TestSectionProcessor:
         #     assert "paragraphs:" in content
         
         # モックインスタンスを使用する場合
-        structure_file = section_processor.write_section_structure(str(section_dir), sample_structure_data)
+        structure_file = section_processor.write_structure(str(section_dir), sample_structure_data)
         
         # 結果が正しいことを確認
         assert structure_file is not None
-        assert "section_structure.yaml" in structure_file
+        assert "structure.yaml" in structure_file
         assert str(section_dir) in structure_file
     
     def test_extract_section_title(self, section_processor, sample_section_data):
