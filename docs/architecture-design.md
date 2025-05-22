@@ -169,7 +169,7 @@ title/
 │   ├── text.md
 │   ├── section1/
 │   │   ├── text.md
-│   │   ├── structure.yaml      # パラグラフ構造を含むセクション全体の構造Markdown
+│   │   ├── structure.yaml      # パラグラフ構造を含むセクション全体の構造Yaml
 │   │   ├── paragraph1/
 │   │   │   ├── text.md
 │   │   │   ├── article.md
