@@ -207,7 +207,7 @@ class TestLoggerUtils:
         
         # エラーメッセージが正しいことを確認
         assert "例外が発生しました: コンテキストなしテスト例外" in args[0]
-        assert "コンテキスト" not in args[0]  # コンテキスト情報は含まれていない
+        assert "[コンテキスト:" not in args[0]  # コンテキスト情報は含まれていない
         assert kwargs.get('exc_info') is True
     
     def test_setup_logger_without_file(self, logger_utils):
