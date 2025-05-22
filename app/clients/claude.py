@@ -15,12 +15,12 @@ class ClaudeAPIClient:
             api_key (str, optional): Claude API キー. デフォルトはNone (環境変数から取得)
             model (str, optional): 使用するモデル名. デフォルトは"claude-3-7-sonnet-20250219"
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.environ.get("CLAUDE_API_KEY")
         self.model = model
         self.logger = logging.getLogger(__name__)
 
         if not self.api_key:
-            self.logger.warning("API キーが設定されていません。環境変数 ANTHROPIC_API_KEY を設定してください。")
+            self.logger.warning("API キーが設定されていません。環境変数 CLAUDE_API_KEY を設定してください。")
 
     def prepare_request(self, prompt, images=None):
         """リクエストを準備する
