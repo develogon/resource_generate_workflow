@@ -285,6 +285,12 @@ class WorkflowOrchestrator:
         self.worker_pool = WorkerPool(config)
         self._running = False
         
+        # 追加の必要な属性
+        self.active_workflows = {}
+        self.completion_events = {}
+        self.workflow_start_times = {}
+        self.workflow_metrics = self.metrics  # メトリクスオブジェクトを再利用
+        
     async def initialize(self):
         """オーケストレーターの初期化."""
         logger.info("Initializing orchestrator...")
@@ -294,6 +300,11 @@ class WorkflowOrchestrator:
         
         # イベントバスの開始
         await self.event_bus.start()
+        
+        # 完了ハンドラーの登録
+        completion_handler = WorkflowCompletionHandler(self)
+        await self.event_bus.subscribe(EventType.WORKFLOW_COMPLETED, completion_handler.handle)
+        await self.event_bus.subscribe(EventType.WORKFLOW_FAILED, completion_handler.handle)
         
         # ワーカープールの初期化
         await self.worker_pool.initialize(self.event_bus, self.state_manager)
@@ -326,6 +337,11 @@ class WorkflowOrchestrator:
         # ワークフロー初期化
         context = await self._initialize_workflow(lang, title, input_file)
         
+        # アクティブワークフローとして登録
+        self.active_workflows[context.workflow_id] = context
+        self.workflow_start_times[context.workflow_id] = time.time()
+        self.completion_events[context.workflow_id] = asyncio.Event()
+        
         try:
             logger.info(f"Starting workflow {context.workflow_id}")
             
@@ -351,10 +367,7 @@ class WorkflowOrchestrator:
             
             # 成功時の処理
             context.status = WorkflowStatus.COMPLETED
-            await self.state_manager.save_workflow_state(context.workflow_id, {
-                "status": context.status.value,
-                "completed_at": time.time()
-            })
+            await self.state_manager.save_workflow_state(context.workflow_id, context)
             
             self.metrics.workflows_completed.inc()
             logger.info(f"Workflow {context.workflow_id} completed successfully")
@@ -367,6 +380,10 @@ class WorkflowOrchestrator:
             raise
         finally:
             await self.worker_pool.stop()
+            # クリーンアップ
+            self.active_workflows.pop(context.workflow_id, None)
+            self.completion_events.pop(context.workflow_id, None)
+            self.workflow_start_times.pop(context.workflow_id, None)
     
     async def resume(self, workflow_id: str) -> WorkflowContext:
         """中断したワークフローの再開."""
@@ -405,40 +422,34 @@ class WorkflowOrchestrator:
         )
         
         # 初期状態を保存
-        await self.state_manager.save_workflow_state(workflow_id, {
-            "status": context.status.value,
-            "lang": lang,
-            "title": title,
-            "input_file": input_file,
-            "created_at": context.created_at
-        })
+        await self.state_manager.save_workflow_state(workflow_id, context)
         
         return context
     
     async def _wait_for_completion(self, context: WorkflowContext, timeout: float = 3600):
         """ワークフロー完了の待機."""
-        start_time = time.time()
-        
-        while time.time() - start_time < timeout:
-            # 状態をチェック
-            state = await self.state_manager.get_workflow_state(context.workflow_id)
-            if state and state.get("status") == "completed":
-                return
-                
-            # 少し待機
-            await asyncio.sleep(1)
-            
-        raise TimeoutError(f"Workflow {context.workflow_id} timed out")
+        try:
+            # 完了イベントを待機
+            completion_event = self.completion_events.get(context.workflow_id)
+            if completion_event:
+                await asyncio.wait_for(completion_event.wait(), timeout=timeout)
+            else:
+                # フォールバック：状態をポーリング
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    state = await self.state_manager.get_workflow_state(context.workflow_id)
+                    if state and state.get("status") in ["completed", "failed"]:
+                        return
+                    await asyncio.sleep(1)
+                raise TimeoutError(f"Workflow {context.workflow_id} timed out")
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Workflow {context.workflow_id} timed out")
     
     async def _handle_failure(self, context: WorkflowContext, error: Exception):
         """失敗処理."""
         context.status = WorkflowStatus.FAILED
         
-        await self.state_manager.save_workflow_state(context.workflow_id, {
-            "status": context.status.value,
-            "error": str(error),
-            "failed_at": time.time()
-        })
+        await self.state_manager.save_workflow_state(context.workflow_id, context)
         
         self.metrics.workflows_failed.inc()
     
@@ -456,7 +467,7 @@ class WorkflowOrchestrator:
         if workflow_id in self.active_workflows:
             context = self.active_workflows[workflow_id]
             context.update_status(WorkflowStatus.COMPLETED)
-            await self.state_manager.update_workflow_state(workflow_id, status=WorkflowStatus.COMPLETED)
+            await self.state_manager.update_workflow(workflow_id, status=WorkflowStatus.COMPLETED)
             
             # 開始時間から経過時間を計算
             start_time = self.workflow_start_times.get(workflow_id, context.created_at)
@@ -479,7 +490,7 @@ class WorkflowOrchestrator:
         if workflow_id in self.active_workflows:
             context = self.active_workflows[workflow_id]
             context.update_status(WorkflowStatus.FAILED)
-            await self.state_manager.update_workflow_state(workflow_id, status=WorkflowStatus.FAILED)
+            await self.state_manager.update_workflow(workflow_id, status=WorkflowStatus.FAILED)
             
             # メトリクス記録
             self.workflow_metrics.record_workflow_failed(workflow_id, error_msg)

@@ -76,6 +76,16 @@ class StateManager:
         self.local_cache: Dict[str, Any] = {}
         self.workflows: Dict[str, WorkflowContext] = {}
         
+    async def initialize(self):
+        """StateManagerの初期化処理."""
+        await self.connect()
+        logger.info("StateManager initialized")
+        
+    async def close(self):
+        """StateManagerのクリーンアップ処理."""
+        await self.disconnect()
+        logger.info("StateManager closed")
+        
     async def connect(self):
         """外部ストレージ接続の確立."""
         if REDIS_AVAILABLE and hasattr(self.config, 'redis_url'):
@@ -191,6 +201,14 @@ class StateManager:
                 
         return None
         
+    async def get_workflow_state(self, workflow_id: str) -> Optional[Dict]:
+        """ワークフロー状態を取得（load_workflow_stateのエイリアス）."""
+        return await self.load_workflow_state(workflow_id)
+        
+    async def update_workflow_state(self, workflow_id: str, **updates):
+        """ワークフロー状態を更新."""
+        await self.update_workflow(workflow_id, **updates)
+        
     async def save_checkpoint(self, workflow_id: str, checkpoint_type: str, data: Dict):
         """チェックポイントの保存."""
         checkpoint_id = str(uuid.uuid4())
@@ -280,7 +298,8 @@ class StateManager:
             "created_at": context.created_at,
             "updated_at": context.updated_at,
             "completed_tasks": context.completed_tasks,
-            "failed_tasks": context.failed_tasks
+            "failed_tasks": context.failed_tasks,
+            "input_file": context.input_file
         }
         
     def _deserialize_workflow(self, data: Dict) -> WorkflowContext:
@@ -295,7 +314,8 @@ class StateManager:
             created_at=data.get("created_at", time.time()),
             updated_at=data.get("updated_at", time.time()),
             completed_tasks=data.get("completed_tasks", []),
-            failed_tasks=data.get("failed_tasks", [])
+            failed_tasks=data.get("failed_tasks", []),
+            input_file=data.get("input_file")
         )
         
     def _serialize_checkpoint(self, checkpoint: Checkpoint) -> Dict:

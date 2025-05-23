@@ -30,7 +30,7 @@ class AIWorker(BaseWorker):
         self.openai_client = None  # 後で実装
         self.rate_limiter = None   # 後で実装
         
-    def get_subscriptions(self) -> Set[str]:
+    def get_subscriptions(self) -> Set[EventType]:
         """購読するイベントタイプを返す."""
         return {
             EventType.SECTION_PARSED,
@@ -71,7 +71,7 @@ class AIWorker(BaseWorker):
         # 構造解析完了イベントを発行
         if self.event_bus:
             analysis_event = Event(
-                event_type=EventType.STRUCTURE_ANALYZED,
+                type=EventType.STRUCTURE_ANALYZED,
                 workflow_id=event.workflow_id,
                 data={
                     'section': section_data,
@@ -84,21 +84,21 @@ class AIWorker(BaseWorker):
             
     async def _handle_paragraph_parsed(self, event: Event) -> None:
         """パラグラフ解析イベントの処理."""
-        paragraph_data = event.data.get('paragraph')
-        section_data = event.data.get('section')
+        # パーサーワーカーから直接送信されるデータ構造に対応
+        paragraph_data = event.data
         
-        if not paragraph_data:
+        if not paragraph_data or not paragraph_data.get('content'):
             raise ValueError("No paragraph data provided")
             
-        logger.info(f"Generating content for paragraph {paragraph_data.get('index', 0)}")
+        logger.info(f"Generating content for paragraph {paragraph_data.get('paragraph_index', 0)}")
         
         # 並列でコンテンツ生成
         generation_tasks = [
-            self._generate_article(paragraph_data, section_data),
-            self._generate_script(paragraph_data, section_data),
-            self._generate_script_json(paragraph_data, section_data),
-            self._generate_tweet(paragraph_data, section_data),
-            self._generate_description(paragraph_data, section_data)
+            self._generate_article(paragraph_data, None),
+            self._generate_script(paragraph_data, None),
+            self._generate_script_json(paragraph_data, None),
+            self._generate_tweet(paragraph_data, None),
+            self._generate_description(paragraph_data, None)
         ]
         
         results = await asyncio.gather(*generation_tasks, return_exceptions=True)
@@ -107,16 +107,17 @@ class AIWorker(BaseWorker):
         for idx, result in enumerate(results):
             if not isinstance(result, Exception) and result:
                 content_event = Event(
-                    event_type=EventType.CONTENT_GENERATED,
+                    type=EventType.CONTENT_GENERATED,
                     workflow_id=event.workflow_id,
                     data={
                         'content': result,
                         'paragraph': paragraph_data,
-                        'section': section_data
+                        'section': None
                     },
                     trace_id=event.trace_id
                 )
-                await self.event_bus.publish(content_event)
+                if self.event_bus:
+                    await self.event_bus.publish(content_event)
             elif isinstance(result, Exception):
                 logger.error(f"Content generation failed for task {idx}: {result}")
                 
@@ -137,7 +138,7 @@ class AIWorker(BaseWorker):
         # メタデータ生成完了イベントを発行
         if self.event_bus:
             metadata_event = Event(
-                event_type=EventType.METADATA_GENERATED,
+                type=EventType.METADATA_GENERATED,
                 workflow_id=event.workflow_id,
                 data={
                     'chapter': chapter_data,
@@ -185,7 +186,7 @@ class AIWorker(BaseWorker):
         try:
             # TODO: 実際のAI APIを使用した記事生成
             content = paragraph_data.get('content', '')
-            section_title = section_data.get('title', '') if section_data else ''
+            section_title = section_data.get('title', '') if section_data else paragraph_data.get('title', 'Unknown')
             
             # シミュレーション: 実際の実装では Claude/OpenAI API を使用
             generated_article = {
@@ -204,21 +205,21 @@ class AIWorker(BaseWorker):
             return None
             
     async def _generate_script(self, paragraph_data: Dict[str, Any], section_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """台本コンテンツを生成."""
+        """動画台本を生成."""
         try:
             content = paragraph_data.get('content', '')
-            section_title = section_data.get('title', '') if section_data else ''
+            section_title = section_data.get('title', '') if section_data else paragraph_data.get('title', 'Unknown')
             
-            # シミュレーション: 実際の実装では Claude/OpenAI API を使用
+            # シミュレーション: 実際の実装では AI API を使用
             generated_script = {
                 'type': 'script',
                 'title': f"台本: {section_title}",
-                'content': f"【台本】\nナレーター: {content}\n\n（解説を追加）\nこのポイントについて詳しく説明しましょう...",
-                'estimated_duration': 120,  # 秒
+                'content': f"【台本】\nナレーション: {content}\n\n（画面表示: 関連図表）\n\nこのように、{content}について説明できます。",
+                'duration_seconds': len(content.split()) * 2,  # 推定時間
                 'format': 'text'
             }
             
-            await asyncio.sleep(0.1)  # API呼び出しのシミュレーション
+            await asyncio.sleep(0.1)
             return generated_script
             
         except Exception as e:
@@ -226,63 +227,68 @@ class AIWorker(BaseWorker):
             return None
             
     async def _generate_script_json(self, paragraph_data: Dict[str, Any], section_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """JSON形式の台本を生成."""
+        """構造化された動画台本（JSON形式）を生成."""
         try:
             content = paragraph_data.get('content', '')
-            section_title = section_data.get('title', '') if section_data else ''
+            section_title = section_data.get('title', '') if section_data else paragraph_data.get('title', 'Unknown')
             
-            # シミュレーション: 実際の実装では Claude/OpenAI API を使用
-            generated_script_json = {
+            # 構造化された台本データ
+            script_structure = {
                 'type': 'script_json',
-                'title': f"台本JSON: {section_title}",
-                'content': {
-                    'scenes': [
-                        {
-                            'id': 1,
-                            'speaker': 'ナレーター',
-                            'text': content,
-                            'duration': 30,
-                            'notes': '基本説明'
-                        },
-                        {
-                            'id': 2,
-                            'speaker': 'ナレーター',
-                            'text': 'より詳しい解説を続けます...',
-                            'duration': 60,
-                            'notes': '詳細説明'
-                        }
-                    ],
-                    'total_duration': 90
-                },
+                'title': f"構造化台本: {section_title}",
+                'scenes': [
+                    {
+                        'scene_id': 1,
+                        'type': 'introduction',
+                        'narration': f"今回は{section_title}について説明します。",
+                        'visual_elements': ['title_slide'],
+                        'duration': 3
+                    },
+                    {
+                        'scene_id': 2,
+                        'type': 'main_content',
+                        'narration': content,
+                        'visual_elements': ['code_example', 'diagram'],
+                        'duration': len(content.split()) * 1.5
+                    },
+                    {
+                        'scene_id': 3,
+                        'type': 'summary',
+                        'narration': f"{section_title}のポイントをまとめると...",
+                        'visual_elements': ['summary_slide'],
+                        'duration': 2
+                    }
+                ],
+                'total_duration': len(content.split()) * 1.5 + 5,
                 'format': 'json'
             }
             
-            await asyncio.sleep(0.1)  # API呼び出しのシミュレーション
-            return generated_script_json
+            await asyncio.sleep(0.1)
+            return script_structure
             
         except Exception as e:
-            logger.error(f"Script JSON generation failed: {e}")
+            logger.error(f"Structured script generation failed: {e}")
             return None
             
     async def _generate_tweet(self, paragraph_data: Dict[str, Any], section_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """ツイートコンテンツを生成."""
         try:
             content = paragraph_data.get('content', '')
-            section_title = section_data.get('title', '') if section_data else ''
+            section_title = section_data.get('title', '') if section_data else paragraph_data.get('title', 'Unknown')
             
-            # シミュレーション: 実際の実装では Claude/OpenAI API を使用
-            # ツイートは280文字制限
-            tweet_content = f"💡 {section_title}: {content[:100]}... #技術書 #学習"
+            # 140文字以内のツイート生成
+            tweet_content = content[:100] + "..." if len(content) > 100 else content
             
             generated_tweet = {
                 'type': 'tweet',
-                'content': tweet_content,
-                'character_count': len(tweet_content),
-                'hashtags': ['#技術書', '#学習'],
+                'title': f"ツイート: {section_title}",
+                'content': f"🚀 {section_title}\n\n{tweet_content}\n\n#プログラミング #技術解説",
+                'character_count': len(f"🚀 {section_title}\n\n{tweet_content}\n\n#プログラミング #技術解説"),
+                'hashtags': ['プログラミング', '技術解説'],
                 'format': 'text'
             }
             
-            await asyncio.sleep(0.1)  # API呼び出しのシミュレーション
+            await asyncio.sleep(0.1)
             return generated_tweet
             
         except Exception as e:
@@ -293,18 +299,18 @@ class AIWorker(BaseWorker):
         """説明文を生成."""
         try:
             content = paragraph_data.get('content', '')
-            section_title = section_data.get('title', '') if section_data else ''
+            section_title = section_data.get('title', '') if section_data else paragraph_data.get('title', 'Unknown')
             
-            # シミュレーション: 実際の実装では Claude/OpenAI API を使用
+            # 説明文生成
             generated_description = {
                 'type': 'description',
                 'title': f"説明: {section_title}",
-                'content': f"【要約】\n{content}\n\n【詳細説明】\nこの内容は重要なポイントを含んでおり、理解を深めるための具体例や背景情報を提供します。",
-                'summary': content[:200] + "..." if len(content) > 200 else content,
-                'format': 'markdown'
+                'content': f"{section_title}について：\n\n{content}\n\nこの技術は現代の開発において重要な役割を果たしています。",
+                'word_count': len(content.split()) + 20,
+                'format': 'text'
             }
             
-            await asyncio.sleep(0.1)  # API呼び出しのシミュレーション
+            await asyncio.sleep(0.1)
             return generated_description
             
         except Exception as e:

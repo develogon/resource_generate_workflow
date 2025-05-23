@@ -47,6 +47,30 @@ class Event:
     retry_count: int = 0
     priority: int = 0
     trace_id: Optional[str] = None
+    
+    def __lt__(self, other):
+        """比較演算子（優先度付きキューで使用）."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.priority < other.priority
+        
+    def __le__(self, other):
+        """比較演算子（優先度付きキューで使用）."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.priority <= other.priority
+        
+    def __gt__(self, other):
+        """比較演算子（優先度付きキューで使用）."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.priority > other.priority
+        
+    def __ge__(self, other):
+        """比較演算子（優先度付きキューで使用）."""
+        if not isinstance(other, Event):
+            return NotImplemented
+        return self.priority >= other.priority
 
 
 class EventBus:
