@@ -6,6 +6,8 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import os
+from pathlib import Path
 
 from .base import BaseWorker, Event, EventType
 from ..config import Config
@@ -208,14 +210,14 @@ class AggregatorWorker(BaseWorker):
         
     async def _handle_paragraph_parsed(self, event: Event, workflow_state: WorkflowState) -> None:
         """パラグラフ解析イベントの処理."""
-        paragraph = event.data.get('paragraph')
-        section = event.data.get('section')
+        # パーサーから直接送信されるデータを使用
+        paragraph_data = event.data
         
-        if paragraph:
-            paragraph_id = self._generate_paragraph_id(paragraph)
+        if paragraph_data and paragraph_data.get('content'):
+            paragraph_id = self._generate_paragraph_id(paragraph_data)
             workflow_state.paragraphs[paragraph_id] = {
-                'data': paragraph,
-                'section': section,
+                'data': paragraph_data,
+                'section': None,  # セクション情報は別途管理
                 'status': 'parsed',
                 'content_generated': {},  # 生成されたコンテンツを追跡
                 'received_at': datetime.now()
@@ -225,16 +227,16 @@ class AggregatorWorker(BaseWorker):
         
     async def _handle_section_parsed(self, event: Event, workflow_state: WorkflowState) -> None:
         """セクション解析イベントの処理."""
-        section = event.data.get('section')
-        chapter = event.data.get('chapter')
+        # パーサーから直接送信されるデータを使用
+        section_data = event.data
         
-        if section:
-            section_id = self._generate_section_id(section)
+        if section_data and section_data.get('content'):
+            section_id = self._generate_section_id(section_data)
             workflow_state.sections[section_id] = {
-                'data': section,
-                'chapter': chapter,
+                'data': section_data,
+                'chapter': None,  # チャプター情報は別途管理
                 'status': 'parsed',
-                'paragraphs_count': len(section.get('paragraphs', [])),
+                'paragraphs_count': 0,  # パラグラフは後で追加
                 'received_at': datetime.now()
             }
             
@@ -242,10 +244,11 @@ class AggregatorWorker(BaseWorker):
         
     async def _handle_chapter_parsed(self, event: Event, workflow_state: WorkflowState) -> None:
         """チャプター解析イベントの処理."""
-        chapter = event.data.get('chapter')
+        # パーサーから直接送信されるデータを使用
+        chapter_data = event.data
         
-        if chapter:
-            chapter_id = self._generate_chapter_id(chapter)
+        if chapter_data and (chapter_data.get('content') or chapter_data.get('title')):
+            chapter_id = self._generate_chapter_id(chapter_data)
             if chapter_id in workflow_state.chapters:
                 # 既存のチャプター情報を更新
                 workflow_state.chapters[chapter_id].update({
@@ -255,9 +258,9 @@ class AggregatorWorker(BaseWorker):
             else:
                 # 新しいチャプターとして記録
                 workflow_state.chapters[chapter_id] = {
-                    'data': chapter,
+                    'data': chapter_data,
                     'status': 'parsed',
-                    'sections_count': len(chapter.get('sections', [])),
+                    'sections_count': 0,  # セクションは後で追加
                     'received_at': datetime.now()
                 }
                 
@@ -276,7 +279,7 @@ class AggregatorWorker(BaseWorker):
             # 完了イベントを発行
             if self.event_bus:
                 completion_event = Event(
-                    event_type=EventType.WORKFLOW_COMPLETED,
+                    type=EventType.WORKFLOW_COMPLETED,
                     workflow_id=workflow_state.workflow_id,
                     data={
                         'aggregation_result': aggregation_result,
@@ -304,21 +307,26 @@ class AggregatorWorker(BaseWorker):
         total_paragraphs = len(workflow_state.paragraphs)
         total_content_items = len(workflow_state.content_items)
         
-        # 期待される最小値を計算
-        expected_content_items = total_paragraphs * self.completion_thresholds['min_content_per_paragraph']
+        # より現実的な期待値を計算
+        expected_content_items = max(total_paragraphs * 2, 1)  # パラグラフあたり最低2つのコンテンツ
         
         # 進行率を計算
         progress = 0.0
         if expected_content_items > 0:
             progress = min(total_content_items / expected_content_items, 1.0)
             
-        # 完了条件をチェック
+        # より緩い完了条件をチェック
         is_complete = (
-            total_chapters >= self.completion_thresholds['min_chapters'] and
-            total_sections >= total_chapters * self.completion_thresholds['min_sections_per_chapter'] and
-            total_paragraphs >= total_sections * self.completion_thresholds['min_paragraphs_per_section'] and
-            progress >= 0.8  # 80%以上のコンテンツが生成されている
+            total_chapters >= 1 and  # 最低1つのチャプター
+            total_sections >= 1 and  # 最低1つのセクション  
+            total_paragraphs >= 1 and  # 最低1つのパラグラフ
+            total_content_items >= total_paragraphs  # パラグラフ数以上のコンテンツ
         )
+        
+        # デバッグ情報をログに出力
+        logger.info(f"Completion assessment - Chapters: {total_chapters}, Sections: {total_sections}, "
+                   f"Paragraphs: {total_paragraphs}, Content items: {total_content_items}, "
+                   f"Progress: {progress:.2f}, Complete: {is_complete}")
         
         return {
             'is_complete': is_complete,
@@ -362,7 +370,7 @@ class AggregatorWorker(BaseWorker):
         # 中間集約イベントを発行
         if self.event_bus:
             intermediate_event = Event(
-                event_type=EventType.INTERMEDIATE_AGGREGATED,
+                type=EventType.INTERMEDIATE_AGGREGATED,
                 workflow_id=workflow_state.workflow_id,
                 data={
                     'completion_status': completion_status,
@@ -433,6 +441,10 @@ class AggregatorWorker(BaseWorker):
         
     async def _generate_final_outputs(self, workflow_state: WorkflowState, result: AggregationResult) -> None:
         """最終出力を生成."""
+        # 出力ディレクトリを確保
+        output_dir = Path(self.config.storage.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
         # JSONレポートの生成
         report = {
             'workflow_id': workflow_state.workflow_id,
@@ -451,14 +463,42 @@ class AggregatorWorker(BaseWorker):
             'metadata': self._serialize_metadata(workflow_state)
         }
         
+        # レポートファイルを保存
+        report_file = output_dir / f"report_{workflow_state.workflow_id}.json"
+        with open(report_file, 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"Generated final report: {report_file}")
+        
+        # 各コンテンツタイプ別にファイルを保存
+        for content_id, content_item in workflow_state.content_items.items():
+            content = content_item['content']
+            content_type = content.get('type', 'unknown')
+            title = content.get('title', 'untitled')
+            
+            # ファイル名を安全に生成
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_title = safe_title.replace(' ', '_')[:50]
+            
+            content_file = output_dir / f"{content_type}_{safe_title}_{content_id}.txt"
+            with open(content_file, 'w', encoding='utf-8') as f:
+                f.write(f"Title: {title}\n")
+                f.write(f"Type: {content_type}\n")
+                f.write(f"Generated at: {content_item['received_at']}\n")
+                f.write(f"\n{content.get('content', '')}\n")
+                
+        logger.info(f"Generated {len(workflow_state.content_items)} content files")
+        
         # レポート保存イベントを発行
         if self.event_bus:
             report_event = Event(
-                event_type=EventType.REPORT_GENERATED,
+                type=EventType.REPORT_GENERATED,
                 workflow_id=workflow_state.workflow_id,
                 data={
                     'report': report,
-                    'format': 'json'
+                    'format': 'json',
+                    'output_dir': str(output_dir),
+                    'files_generated': len(workflow_state.content_items) + 1
                 }
             )
             await self.event_bus.publish(report_event)
@@ -523,20 +563,22 @@ class AggregatorWorker(BaseWorker):
     def _generate_chapter_id(self, chapter: Dict[str, Any]) -> str:
         """チャプターIDを生成."""
         title = chapter.get('title', 'unknown')
-        level = chapter.get('level', 1)
-        return f"chapter_{level}_{title.replace(' ', '_')[:30]}"
+        index = chapter.get('index', 0)
+        return f"chapter_{index}_{title.replace(' ', '_')[:30]}"
         
     def _generate_section_id(self, section: Dict[str, Any]) -> str:
         """セクションIDを生成."""
         title = section.get('title', 'unknown')
-        level = section.get('level', 2)
-        return f"section_{level}_{title.replace(' ', '_')[:30]}"
+        chapter_index = section.get('chapter_index', 0)
+        section_index = section.get('section_index', 0)
+        return f"section_{chapter_index}_{section_index}_{title.replace(' ', '_')[:20]}"
         
     def _generate_paragraph_id(self, paragraph: Dict[str, Any]) -> str:
         """パラグラフIDを生成."""
-        index = paragraph.get('index', 0)
-        content_preview = paragraph.get('content', '')[:20].replace(' ', '_')
-        return f"paragraph_{index}_{content_preview}"
+        chapter_index = paragraph.get('chapter_index', 0)
+        section_index = paragraph.get('section_index', 0)
+        paragraph_index = paragraph.get('paragraph_index', 0)
+        return f"paragraph_{chapter_index}_{section_index}_{paragraph_index}"
         
     def get_workflow_status(self, workflow_id: str) -> Optional[Dict[str, Any]]:
         """ワークフローの状態を取得."""

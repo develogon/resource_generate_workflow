@@ -34,7 +34,9 @@ class EventType(Enum):
     # 集約イベント
     SECTION_AGGREGATED = "section.aggregated"
     CHAPTER_AGGREGATED = "chapter.aggregated"
+    INTERMEDIATE_AGGREGATED = "intermediate.aggregated"
     METADATA_GENERATED = "metadata.generated"
+    REPORT_GENERATED = "report.generated"
 
 
 @dataclass

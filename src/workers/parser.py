@@ -97,12 +97,11 @@ class ParserWorker(BaseWorker):
         
     async def _request_structure_analysis(self, event: Event):
         """構造解析をリクエスト."""
-        # AIワーカーに構造解析を依頼
-        await self.event_bus.publish(Event(
-            type=EventType.STRUCTURE_ANALYZED,
-            workflow_id=event.workflow_id,
-            data=event.data
-        ))
+        # AIワーカーに構造解析を依頼（データをそのまま渡す）
+        logger.debug(f"Requesting structure analysis for section: {event.data.get('title', 'Unknown')}")
+        # 注意: ここでSTRUCTURE_ANALYZEDイベントを直接発行するのではなく、
+        # AIワーカーがセクション解析を完了した後に発行するべき
+        # 現在はそのままセクションイベントをAIワーカーに処理させる
         
     async def _parse_paragraphs(self, event: Event):
         """セクションをパラグラフに分割."""

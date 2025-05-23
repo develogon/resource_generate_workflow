@@ -59,8 +59,9 @@ class AIWorker(BaseWorker):
             
     async def _handle_section_parsed(self, event: Event) -> None:
         """セクション解析イベントの処理."""
-        section_data = event.data.get('section')
-        if not section_data:
+        # パーサーワーカーから直接送信されるデータ構造に対応
+        section_data = event.data
+        if not section_data or not section_data.get('content'):
             raise ValueError("No section data provided")
             
         logger.info(f"Analyzing structure for section: {section_data.get('title', 'Unknown')}")
@@ -76,7 +77,11 @@ class AIWorker(BaseWorker):
                 data={
                     'section': section_data,
                     'analysis': analysis_result,
-                    'chapter': event.data.get('chapter')
+                    'chapter_index': section_data.get('chapter_index'),
+                    'section_index': section_data.get('section_index'),
+                    'title': section_data.get('title'),
+                    'content': section_data.get('content'),
+                    'level': section_data.get('level')
                 },
                 trace_id=event.trace_id
             )

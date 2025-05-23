@@ -34,10 +34,6 @@ cd resource_generate_workflow
 
 # 依存関係のインストール
 make setup
-
-# 環境変数の設定
-cp env.example .env
-# .env ファイルを編集してAPI キー等を設定
 ```
 
 ### 2. 必要なサービスの起動
