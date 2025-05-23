@@ -24,46 +24,6 @@ class TweetGenerator(BaseGenerator):
         """生成タイプを返す."""
         return GenerationType.TWEET
         
-    def get_prompt_template(self) -> str:
-        """プロンプトテンプレートを返す."""
-        return """あなたは経験豊富なソーシャルメディアマーケターです。以下のコンテンツをもとに、魅力的なツイートを作成してください。
-
-# 元コンテンツ
-タイトル: {title}
-内容: {content}
-
-# ツイート作成の要件
-1. 文字数は280文字以内に収める
-2. エンゲージメントを高めるキャッチーな表現を使う
-3. 適切なハッシュタグを2-3個含める
-4. 絵文字を効果的に使用する
-5. アクションを促す文言を含める（いいね、RT、リプライなど）
-6. 内容の要点を分かりやすく要約する
-
-# 出力形式
-以下のJSON形式で出力してください：
-```json
-{{
-    "tweets": [
-        {{
-            "content": "ツイート内容",
-            "character_count": 文字数,
-            "hashtags": ["ハッシュタグ1", "ハッシュタグ2"],
-            "emojis": ["使用した絵文字"],
-            "call_to_action": "アクション促進の文言",
-            "engagement_type": "like|retweet|reply|share"
-        }}
-    ],
-    "thread_sequence": [
-        "複数ツイートの場合の順序説明"
-    ],
-    "target_audience": "ターゲット層",
-    "posting_time": "推奨投稿時間帯"
-}}
-```
-
-ツイートを作成してください："""
-
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         """ツイートを生成.
         

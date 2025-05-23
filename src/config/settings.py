@@ -1,355 +1,286 @@
 """設定管理システム."""
 
-from __future__ import annotations
-
 import os
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, Optional
-
 import yaml
-from pydantic import BaseModel, field_validator
-
-from .constants import (
-    DEFAULT_API_TIMEOUT,
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_CACHE_SIZE,
-    DEFAULT_CACHE_TTL,
-    DEFAULT_CLAUDE_MAX_TOKENS,
-    DEFAULT_CLAUDE_MODEL,
-    DEFAULT_CLAUDE_RATE_LIMIT,
-    DEFAULT_CLAUDE_TEMPERATURE,
-    DEFAULT_IMAGE_HEIGHT,
-    DEFAULT_IMAGE_WIDTH,
-    DEFAULT_LOG_FORMAT,
-    DEFAULT_LOG_LEVEL,
-    DEFAULT_MAX_CONCURRENT_TASKS,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_MAX_WORKERS,
-    DEFAULT_METRICS_PATH,
-    DEFAULT_OPENAI_MAX_TOKENS,
-    DEFAULT_OPENAI_MODEL,
-    DEFAULT_OPENAI_TEMPERATURE,
-    DEFAULT_PROMETHEUS_PORT,
-    DEFAULT_REDIS_TTL,
-)
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
 
 
-class RedisConfig(BaseModel):
-    """Redis設定."""
-    
-    url: str = "redis://localhost:6379/0"
-    ttl: int = DEFAULT_REDIS_TTL
-    max_connections: int = 10
-
-
-class ClaudeConfig(BaseModel):
-    """Claude API設定."""
-    
-    api_key: Optional[str] = None
-    base_url: str = "https://api.anthropic.com/v1"
-    model: str = DEFAULT_CLAUDE_MODEL
-    max_tokens: int = DEFAULT_CLAUDE_MAX_TOKENS
-    temperature: float = DEFAULT_CLAUDE_TEMPERATURE
-    rate_limit: int = DEFAULT_CLAUDE_RATE_LIMIT
-
-
-class OpenAIConfig(BaseModel):
-    """OpenAI API設定."""
-    
-    api_key: Optional[str] = None
-    base_url: str = "https://api.openai.com/v1"
-    model: str = DEFAULT_OPENAI_MODEL
-    max_tokens: int = DEFAULT_OPENAI_MAX_TOKENS
-    temperature: float = DEFAULT_OPENAI_TEMPERATURE
-
-
-class AWSConfig(BaseModel):
-    """AWS設定."""
-    
-    access_key_id: Optional[str] = None
-    secret_access_key: Optional[str] = None
-    region: str = "us-west-2"
-    s3_bucket: Optional[str] = None
-
-
-class GitHubConfig(BaseModel):
-    """GitHub設定."""
-    
-    token: Optional[str] = None
-    repo: Optional[str] = None
-
-
-class SlackConfig(BaseModel):
-    """Slack設定."""
-    
-    webhook_url: Optional[str] = None
-    channel: str = "#alerts"
-
-
-class WorkerConfig(BaseModel):
+@dataclass
+class WorkerConfig:
     """ワーカー設定."""
+    max_concurrent_tasks: int = 10
+    counts: Dict[str, int] = field(default_factory=lambda: {
+        "parser": 2,
+        "ai": 3,
+        "media": 2,
+        "aggregator": 1
+    })
+
+
+@dataclass
+class APIConfig:
+    """API設定."""
+    claude_api_key: Optional[str] = None
+    claude_base_url: str = "https://api.anthropic.com/v1"
+    claude_model: str = "claude-3-sonnet-20240229"
+    claude_rate_limit: int = 60  # requests per minute
     
-    max_concurrent_tasks: int = DEFAULT_MAX_CONCURRENT_TASKS
-    max_workers: int = DEFAULT_MAX_WORKERS
-    batch_size: int = DEFAULT_BATCH_SIZE
-    timeout: float = 300.0
-
-
-class CacheConfig(BaseModel):
-    """キャッシュ設定."""
+    openai_api_key: Optional[str] = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4"
     
-    size: int = DEFAULT_CACHE_SIZE
-    ttl: int = DEFAULT_CACHE_TTL
+    timeout: float = 30.0
+    max_retries: int = 3
 
 
-class MetricsConfig(BaseModel):
-    """メトリクス設定."""
+@dataclass
+class StorageConfig:
+    """ストレージ設定."""
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_region: str = "us-east-1"
+    s3_bucket: Optional[str] = None
     
-    enabled: bool = True
-    port: int = DEFAULT_PROMETHEUS_PORT
-    path: str = DEFAULT_METRICS_PATH
+    # ローカルストレージ
+    data_dir: str = "./data"
+    output_dir: str = "./output"
+    cache_dir: str = "./cache"
+    log_dir: str = "./logs"
 
 
-class ImageConfig(BaseModel):
-    """画像処理設定."""
-    
-    width: int = DEFAULT_IMAGE_WIDTH
-    height: int = DEFAULT_IMAGE_HEIGHT
-    format: str = "PNG"
-
-
-class LoggingConfig(BaseModel):
-    """ログ設定."""
-    
-    level: str = DEFAULT_LOG_LEVEL
-    format: str = DEFAULT_LOG_FORMAT
-    
-    @field_validator('level')
-    def validate_log_level(cls, v):
-        """ログレベルの検証."""
-        valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
-        if v.upper() not in valid_levels:
-            raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
-        return v.upper()
+@dataclass
+class RedisConfig:
+    """Redis設定."""
+    url: str = "redis://localhost:6379"
+    state_ttl: int = 86400  # 24時間
+    checkpoint_ttl: int = 604800  # 7日間
+    task_ttl: int = 604800  # 7日間
 
 
 @dataclass
 class Config:
     """アプリケーション設定."""
-    
     # 環境設定
     environment: str = "development"
     debug: bool = False
     
-    # API設定
-    api_timeout: float = DEFAULT_API_TIMEOUT
-    max_retries: int = DEFAULT_MAX_RETRIES
-    
-    # 外部サービス設定
-    redis: RedisConfig = field(default_factory=RedisConfig)
-    claude: ClaudeConfig = field(default_factory=ClaudeConfig)
-    openai: OpenAIConfig = field(default_factory=OpenAIConfig)
-    aws: AWSConfig = field(default_factory=AWSConfig)
-    github: GitHubConfig = field(default_factory=GitHubConfig)
-    slack: SlackConfig = field(default_factory=SlackConfig)
-    
-    # システム設定
+    # ワーカー設定
     workers: WorkerConfig = field(default_factory=WorkerConfig)
-    cache: CacheConfig = field(default_factory=CacheConfig)
-    metrics: MetricsConfig = field(default_factory=MetricsConfig)
-    image: ImageConfig = field(default_factory=ImageConfig)
-    logging: LoggingConfig = field(default_factory=LoggingConfig)
     
-    # パス設定
-    data_dir: Path = field(default_factory=lambda: Path("data"))
-    output_dir: Path = field(default_factory=lambda: Path("output"))
-    cache_dir: Path = field(default_factory=lambda: Path(".cache"))
-    log_dir: Path = field(default_factory=lambda: Path("logs"))
+    # API設定
+    api: APIConfig = field(default_factory=APIConfig)
     
+    # ストレージ設定
+    storage: StorageConfig = field(default_factory=StorageConfig)
+    
+    # Redis設定
+    redis: RedisConfig = field(default_factory=RedisConfig)
+    
+    # メトリクス設定
+    metrics_enabled: bool = True
+    prometheus_port: int = 8000
+    
+    # その他の設定
+    max_concurrent_tasks: int = 10
+    
+    @property
+    def redis_url(self) -> str:
+        """Redis URL の取得."""
+        return self.redis.url
+        
+    @property
+    def worker_counts(self) -> Dict[str, int]:
+        """ワーカー数設定の取得."""
+        return self.workers.counts
+        
     @classmethod
-    def from_env(cls) -> Config:
+    def from_env(cls) -> 'Config':
         """環境変数から設定を読み込み."""
         config = cls()
         
-        # 環境設定
+        # 環境変数の読み込み
         config.environment = os.getenv("ENVIRONMENT", "development")
         config.debug = os.getenv("DEBUG", "false").lower() == "true"
         
         # API設定
-        config.api_timeout = float(os.getenv("API_TIMEOUT", DEFAULT_API_TIMEOUT))
-        config.max_retries = int(os.getenv("MAX_RETRIES", DEFAULT_MAX_RETRIES))
+        config.api.claude_api_key = os.getenv("CLAUDE_API_KEY")
+        config.api.openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        # ストレージ設定
+        config.storage.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+        config.storage.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        config.storage.aws_region = os.getenv("AWS_REGION", "us-east-1")
+        config.storage.s3_bucket = os.getenv("S3_BUCKET")
         
         # Redis設定
-        config.redis = RedisConfig(
-            url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-            ttl=int(os.getenv("REDIS_TTL", DEFAULT_REDIS_TTL)),
-            max_connections=int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
-        )
+        config.redis.url = os.getenv("REDIS_URL", "redis://localhost:6379")
         
-        # Claude設定
-        config.claude = ClaudeConfig(
-            api_key=os.getenv("CLAUDE_API_KEY"),
-            base_url=os.getenv("CLAUDE_BASE_URL", "https://api.anthropic.com/v1"),
-            model=os.getenv("CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL),
-            max_tokens=int(os.getenv("CLAUDE_MAX_TOKENS", DEFAULT_CLAUDE_MAX_TOKENS)),
-            temperature=float(os.getenv("CLAUDE_TEMPERATURE", DEFAULT_CLAUDE_TEMPERATURE)),
-            rate_limit=int(os.getenv("CLAUDE_RATE_LIMIT", DEFAULT_CLAUDE_RATE_LIMIT))
-        )
-        
-        # OpenAI設定
-        config.openai = OpenAIConfig(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
-            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", DEFAULT_OPENAI_MAX_TOKENS)),
-            temperature=float(os.getenv("OPENAI_TEMPERATURE", DEFAULT_OPENAI_TEMPERATURE))
-        )
-        
-        # AWS設定
-        config.aws = AWSConfig(
-            access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            region=os.getenv("AWS_REGION", "us-west-2"),
-            s3_bucket=os.getenv("S3_BUCKET")
-        )
-        
-        # GitHub設定
-        config.github = GitHubConfig(
-            token=os.getenv("GITHUB_TOKEN"),
-            repo=os.getenv("GITHUB_REPO")
-        )
-        
-        # Slack設定
-        config.slack = SlackConfig(
-            webhook_url=os.getenv("SLACK_WEBHOOK_URL"),
-            channel=os.getenv("SLACK_CHANNEL", "#alerts")
-        )
+        # パス設定
+        config.storage.data_dir = os.getenv("DATA_DIR", "./data")
+        config.storage.output_dir = os.getenv("OUTPUT_DIR", "./output")
+        config.storage.cache_dir = os.getenv("CACHE_DIR", "./cache")
+        config.storage.log_dir = os.getenv("LOG_DIR", "./logs")
         
         # ワーカー設定
-        config.workers = WorkerConfig(
-            max_concurrent_tasks=int(os.getenv("MAX_CONCURRENT_TASKS", DEFAULT_MAX_CONCURRENT_TASKS)),
-            max_workers=int(os.getenv("MAX_WORKERS", DEFAULT_MAX_WORKERS)),
-            batch_size=int(os.getenv("BATCH_SIZE", DEFAULT_BATCH_SIZE)),
-            timeout=float(os.getenv("WORKER_TIMEOUT", "300.0"))
-        )
-        
-        # キャッシュ設定
-        config.cache = CacheConfig(
-            size=int(os.getenv("CACHE_SIZE", DEFAULT_CACHE_SIZE)),
-            ttl=int(os.getenv("CACHE_TTL", DEFAULT_CACHE_TTL))
-        )
-        
-        # メトリクス設定
-        config.metrics = MetricsConfig(
-            enabled=os.getenv("METRICS_ENABLED", "true").lower() == "true",
-            port=int(os.getenv("PROMETHEUS_PORT", DEFAULT_PROMETHEUS_PORT)),
-            path=os.getenv("METRICS_PATH", DEFAULT_METRICS_PATH)
-        )
-        
-        # ログ設定
-        config.logging = LoggingConfig(
-            level=os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL),
-            format=os.getenv("LOG_FORMAT", DEFAULT_LOG_FORMAT)
-        )
+        max_concurrent = os.getenv("MAX_CONCURRENT_TASKS")
+        if max_concurrent:
+            config.max_concurrent_tasks = int(max_concurrent)
+            config.workers.max_concurrent_tasks = int(max_concurrent)
         
         return config
-    
+        
     @classmethod
-    def from_file(cls, config_path: Path) -> Config:
+    def from_file(cls, config_path: str) -> 'Config':
         """設定ファイルから設定を読み込み."""
-        if not config_path.exists():
+        config_file = Path(config_path)
+        
+        if not config_file.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
+            
+        with open(config_file, 'r', encoding='utf-8') as f:
+            if config_file.suffix in ['.yaml', '.yml']:
+                config_data = yaml.safe_load(f)
+            else:
+                raise ValueError(f"Unsupported config file format: {config_file.suffix}")
         
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        return cls.from_dict(config_data)
         
-        return cls._from_dict(data)
-    
     @classmethod
-    def _from_dict(cls, data: Dict[str, Any]) -> Config:
-        """辞書から設定を作成."""
+    def from_dict(cls, data: Dict[str, Any]) -> 'Config':
+        """辞書から設定を読み込み."""
         config = cls()
         
-        # 環境設定
+        # 基本設定
         config.environment = data.get("environment", "development")
         config.debug = data.get("debug", False)
-        
-        # API設定
-        api_config = data.get("api", {})
-        config.api_timeout = api_config.get("timeout", DEFAULT_API_TIMEOUT)
-        config.max_retries = api_config.get("max_retries", DEFAULT_MAX_RETRIES)
-        
-        # Redis設定
-        redis_data = data.get("redis", {})
-        config.redis = RedisConfig(**redis_data)
-        
-        # Claude設定
-        claude_data = data.get("claude", {})
-        config.claude = ClaudeConfig(**claude_data)
-        
-        # OpenAI設定
-        openai_data = data.get("openai", {})
-        config.openai = OpenAIConfig(**openai_data)
-        
-        # AWS設定
-        aws_data = data.get("aws", {})
-        config.aws = AWSConfig(**aws_data)
-        
-        # GitHub設定
-        github_data = data.get("github", {})
-        config.github = GitHubConfig(**github_data)
-        
-        # Slack設定
-        slack_data = data.get("slack", {})
-        config.slack = SlackConfig(**slack_data)
+        config.max_concurrent_tasks = data.get("max_concurrent_tasks", 10)
         
         # ワーカー設定
-        workers_data = data.get("workers", {})
-        config.workers = WorkerConfig(**workers_data)
-        
-        # キャッシュ設定
-        cache_data = data.get("cache", {})
-        config.cache = CacheConfig(**cache_data)
-        
-        # メトリクス設定
-        metrics_data = data.get("metrics", {})
-        config.metrics = MetricsConfig(**metrics_data)
-        
-        # 画像設定
-        image_data = data.get("image", {})
-        config.image = ImageConfig(**image_data)
-        
-        # ログ設定
-        logging_data = data.get("logging", {})
-        config.logging = LoggingConfig(**logging_data)
-        
+        if "workers" in data:
+            worker_data = data["workers"]
+            config.workers.max_concurrent_tasks = worker_data.get("max_concurrent_tasks", 10)
+            if "counts" in worker_data:
+                config.workers.counts.update(worker_data["counts"])
+                
+        # API設定
+        if "api" in data:
+            api_data = data["api"]
+            for key, value in api_data.items():
+                if hasattr(config.api, key):
+                    setattr(config.api, key, value)
+                    
+        # ストレージ設定
+        if "storage" in data:
+            storage_data = data["storage"]
+            for key, value in storage_data.items():
+                if hasattr(config.storage, key):
+                    setattr(config.storage, key, value)
+                    
+        # Redis設定
+        if "redis" in data:
+            redis_data = data["redis"]
+            for key, value in redis_data.items():
+                if hasattr(config.redis, key):
+                    setattr(config.redis, key, value)
+                    
         return config
-    
-    def create_directories(self) -> None:
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """設定を辞書に変換."""
+        return {
+            "environment": self.environment,
+            "debug": self.debug,
+            "max_concurrent_tasks": self.max_concurrent_tasks,
+            "workers": {
+                "max_concurrent_tasks": self.workers.max_concurrent_tasks,
+                "counts": self.workers.counts
+            },
+            "api": {
+                "claude_api_key": "***" if self.api.claude_api_key else None,
+                "claude_base_url": self.api.claude_base_url,
+                "claude_model": self.api.claude_model,
+                "claude_rate_limit": self.api.claude_rate_limit,
+                "openai_api_key": "***" if self.api.openai_api_key else None,
+                "openai_base_url": self.api.openai_base_url,
+                "openai_model": self.api.openai_model,
+                "timeout": self.api.timeout,
+                "max_retries": self.api.max_retries
+            },
+            "storage": {
+                "aws_access_key_id": "***" if self.storage.aws_access_key_id else None,
+                "aws_secret_access_key": "***" if self.storage.aws_secret_access_key else None,
+                "aws_region": self.storage.aws_region,
+                "s3_bucket": self.storage.s3_bucket,
+                "data_dir": self.storage.data_dir,
+                "output_dir": self.storage.output_dir,
+                "cache_dir": self.storage.cache_dir,
+                "log_dir": self.storage.log_dir
+            },
+            "redis": {
+                "url": self.redis.url,
+                "state_ttl": self.redis.state_ttl,
+                "checkpoint_ttl": self.redis.checkpoint_ttl,
+                "task_ttl": self.redis.task_ttl
+            },
+            "metrics_enabled": self.metrics_enabled,
+            "prometheus_port": self.prometheus_port
+        }
+        
+    def validate(self) -> List[str]:
+        """設定の検証."""
+        errors = []
+        
+        # 必須設定のチェック
+        if self.environment == "production":
+            if not self.api.claude_api_key and not self.api.openai_api_key:
+                errors.append("API key is required in production")
+                
+        # パスの存在チェック
+        for path_attr in ["data_dir", "output_dir", "cache_dir", "log_dir"]:
+            path = getattr(self.storage, path_attr)
+            if not Path(path).exists():
+                try:
+                    Path(path).mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    errors.append(f"Cannot create directory {path}: {e}")
+                    
+        return errors
+        
+    def setup_directories(self):
         """必要なディレクトリを作成."""
         directories = [
-            self.data_dir,
-            self.output_dir,
-            self.cache_dir,
-            self.log_dir
+            self.storage.data_dir,
+            self.storage.output_dir,
+            self.storage.cache_dir,
+            self.storage.log_dir
         ]
         
         for directory in directories:
-            directory.mkdir(parents=True, exist_ok=True)
-    
-    def validate(self) -> None:
-        """設定の検証."""
-        # 必須設定のチェック
-        if not self.claude.api_key and not self.openai.api_key:
-            raise ValueError("At least one of Claude or OpenAI API key must be provided")
+            Path(directory).mkdir(parents=True, exist_ok=True)
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """設定の読み込み."""
+    if config_path:
+        # 指定されたファイルから読み込み
+        return Config.from_file(config_path)
+    else:
+        # 環境変数から読み込み
+        config = Config.from_env()
         
-        # パス設定の検証
-        if not self.data_dir.is_absolute():
-            self.data_dir = Path.cwd() / self.data_dir
-        if not self.output_dir.is_absolute():
-            self.output_dir = Path.cwd() / self.output_dir
-        if not self.cache_dir.is_absolute():
-            self.cache_dir = Path.cwd() / self.cache_dir
-        if not self.log_dir.is_absolute():
-            self.log_dir = Path.cwd() / self.log_dir 
+        # 環境別設定ファイルがあれば読み込み
+        env_config_path = f"config/{config.environment}.yml"
+        if Path(env_config_path).exists():
+            file_config = Config.from_file(env_config_path)
+            # 環境変数の設定で上書き
+            for attr in ["api", "storage", "redis"]:
+                file_attr = getattr(file_config, attr)
+                env_attr = getattr(config, attr)
+                for key, value in env_attr.__dict__.items():
+                    if value is not None:
+                        setattr(file_attr, key, value)
+                setattr(config, attr, file_attr)
+        
+        return config 

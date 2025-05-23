@@ -28,11 +28,6 @@ def run_integration_tests():
         # ログ出力を表示
         "--log-cli-level=INFO",
         
-        # カバレッジレポート
-        "--cov=src",
-        "--cov-report=html:htmlcov/integration",
-        "--cov-report=term-missing",
-        
         # 警告を表示
         "-W", "ignore::DeprecationWarning",
         

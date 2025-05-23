@@ -7,8 +7,23 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from ..config import Config
-from ..models import Content
+# Config のインポートをオプション化
+try:
+    from ..config import Config
+except ImportError:
+    # テスト環境など、config が利用できない場合のフォールバック
+    class Config:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+            # デフォルト値の設定
+            if not hasattr(self, 'workers'):
+                from types import SimpleNamespace
+                self.workers = SimpleNamespace()
+                self.workers.max_concurrent_tasks = 10
+
+# プロンプトローダーをインポート
+from ..utils.prompt_loader import get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +40,16 @@ class GenerationType(Enum):
 @dataclass
 class GenerationRequest:
     """生成リクエスト."""
-    content: Content
-    generation_type: GenerationType
-    options: Dict[str, Any]
-    context: Dict[str, Any]
+    title: str
+    content: str
+    content_type: str
+    lang: str
+    options: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        """初期化後処理."""
+        if self.options is None:
+            self.options = {}
 
 
 @dataclass
@@ -47,7 +68,10 @@ class BaseGenerator(ABC):
     def __init__(self, config: Config):
         """初期化."""
         self.config = config
-        self.semaphore = asyncio.Semaphore(config.workers.max_concurrent_tasks)
+        # 実装されていない属性の安全な処理
+        max_tasks = getattr(config.workers, 'max_concurrent_tasks', 10) if hasattr(config, 'workers') else 10
+        self.semaphore = asyncio.Semaphore(max_tasks)
+        self.prompt_loader = get_prompt_loader()
         
     @abstractmethod
     async def generate(self, request: GenerationRequest) -> GenerationResult:
@@ -66,10 +90,11 @@ class BaseGenerator(ABC):
         """生成タイプを返す."""
         pass
         
-    @abstractmethod
     def get_prompt_template(self) -> str:
         """プロンプトテンプレートを返す."""
-        pass
+        # デフォルトでは生成タイプに基づいてプロンプトファイルから読み込み
+        generation_type = self.get_generation_type().value
+        return self.prompt_loader.get_combined_prompt(generation_type)
         
     async def batch_generate(self, requests: List[GenerationRequest]) -> List[GenerationResult]:
         """複数コンテンツのバッチ生成.
@@ -98,7 +123,7 @@ class BaseGenerator(ABC):
                 generated_results.append(GenerationResult(
                     content="",
                     metadata={},
-                    generation_type=requests[idx].generation_type,
+                    generation_type=self.get_generation_type(),
                     success=False,
                     error=str(result)
                 ))
@@ -117,7 +142,7 @@ class BaseGenerator(ABC):
                 return GenerationResult(
                     content="",
                     metadata={},
-                    generation_type=request.generation_type,
+                    generation_type=self.get_generation_type(),
                     success=False,
                     error=str(e)
                 )
@@ -133,10 +158,8 @@ class BaseGenerator(ABC):
         """
         if not request or not request.content:
             return False
-        if request.generation_type != self.get_generation_type():
-            return False
         # コンテンツが空でないことを確認
-        if not request.content.content or not request.content.content.strip():
+        if not request.content or not request.content.strip():
             return False
         return True
         
@@ -149,28 +172,25 @@ class BaseGenerator(ABC):
         Returns:
             構築されたプロンプト
         """
-        template = self.get_prompt_template()
+        # プロンプトファイルから読み込み
+        generation_type = self.get_generation_type().value
         
-        # コンテンツの情報を抽出
-        content_info = {
-            "title": request.content.title,
-            "content": request.content.content,
-            "metadata": request.content.metadata
+        # プロンプト変数を準備
+        prompt_vars = {
+            "CHAPTER_TITLE": request.options.get("chapter_title", ""),
+            "SECTION_TITLE": request.title,
+            "SECTION_CONTENT": request.content,
+            "title": request.title,
+            "content": request.content,
+            "lang": request.lang,
+            "content_type": request.content_type
         }
         
-        # 全ての変数を統合（優先順位: context > options > content_info）
-        template_vars = {}
-        template_vars.update(content_info)
-        template_vars.update(request.options)
-        template_vars.update(request.context)
+        # リクエストのオプションをマージ
+        prompt_vars.update(request.options)
         
-        # テンプレートに値を埋め込み
-        try:
-            prompt = template.format(**template_vars)
-            return prompt
-        except KeyError as e:
-            logger.warning(f"Missing template variable: {e}")
-            return template
+        # プロンプトテンプレートを取得してフォーマット
+        return self.prompt_loader.get_combined_prompt(generation_type, **prompt_vars)
             
     def extract_metadata(self, request: GenerationRequest, generated_content: str) -> Dict[str, Any]:
         """生成されたコンテンツからメタデータを抽出.
@@ -182,10 +202,11 @@ class BaseGenerator(ABC):
         Returns:
             抽出されたメタデータ
         """
+        import time
         return {
             "word_count": len(generated_content.split()),
             "char_count": len(generated_content),
             "generation_type": self.get_generation_type().value,
-            "source_title": request.content.title,
-            "generated_at": asyncio.get_event_loop().time()
+            "source_title": request.title,
+            "generated_at": time.time()
         } 

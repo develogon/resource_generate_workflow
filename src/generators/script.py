@@ -5,7 +5,16 @@ import logging
 from typing import Dict, Any, Optional
 
 from .base import BaseGenerator, GenerationType, GenerationRequest, GenerationResult
-from ..config import Config
+
+# Config のインポートをオプション化
+try:
+    from ..config import Config
+except ImportError:
+    # テスト環境など、config が利用できない場合のフォールバック
+    class Config:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
 logger = logging.getLogger(__name__)
 
@@ -22,47 +31,6 @@ class ScriptGenerator(BaseGenerator):
         """生成タイプを返す."""
         return GenerationType.SCRIPT
         
-    def get_prompt_template(self) -> str:
-        """プロンプトテンプレートを返す."""
-        return """あなたは経験豊富な動画台本ライターです。以下のコンテンツをもとに、視聴者にとって魅力的で分かりやすい動画台本を作成してください。
-
-# 元コンテンツ
-タイトル: {title}
-内容: {content}
-
-# 台本作成の要件
-1. 導入部（10-15秒）で視聴者の興味を引く
-2. 本編で内容を分かりやすく説明（1-3分程度）
-3. まとめ部（10-15秒）で要点を整理
-4. 話し言葉で自然な文体にする
-5. 適切な箇所で間（pause）や強調（emphasis）を指示
-6. 視覚的な要素（図表、画像等）があれば台本に組み込む
-
-# 出力形式
-以下のJSON形式で出力してください：
-```json
-{{
-    "title": "動画タイトル",
-    "duration": "推定時間（分：秒）",
-    "sections": [
-        {{
-            "type": "introduction|main|conclusion",
-            "duration": "推定時間（秒）",
-            "script": "台本内容",
-            "notes": "演出・撮影に関する注意事項"
-        }}
-    ],
-    "visual_elements": [
-        "必要な視覚的要素のリスト"
-    ],
-    "key_points": [
-        "動画の要点のリスト"
-    ]
-}}
-```
-
-台本を作成してください："""
-
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         """台本を生成.
         

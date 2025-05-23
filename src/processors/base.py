@@ -20,6 +20,7 @@ class ProcessorType(Enum):
     SECTION = "section"
     PARAGRAPH = "paragraph"
     STRUCTURE = "structure"
+    MARKDOWN = "markdown"
 
 
 @dataclass

@@ -17,9 +17,11 @@ from typing import Dict, Any, Optional, List, Set
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .event_bus import EventBus, Event, EventType, EventHandler
-from .state_manager import StateManager, WorkflowStatus
-from .metrics import MetricsCollector, WorkflowMetrics
+from .events import EventBus, Event, EventType
+from .state import StateManager, WorkflowContext, WorkflowStatus
+from .metrics import MetricsCollector
+from ..workers.pool import WorkerPool
+from ..config.settings import Config
 
 logger = logging.getLogger(__name__)
 
@@ -33,24 +35,6 @@ class WorkerType(Enum):
 
 
 @dataclass
-class WorkflowContext:
-    """ワークフロー実行コンテキスト"""
-    workflow_id: str
-    lang: str
-    title: str
-    status: WorkflowStatus
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    checkpoints: List[str] = field(default_factory=list)
-    created_at: float = field(default_factory=time.time)
-    updated_at: float = field(default_factory=time.time)
-    
-    def update_status(self, status: WorkflowStatus):
-        """ステータスを更新"""
-        self.status = status
-        self.updated_at = time.time()
-
-
-@dataclass
 class WorkerConfig:
     """ワーカー設定"""
     worker_type: WorkerType
@@ -60,7 +44,7 @@ class WorkerConfig:
     enabled: bool = True
 
 
-class BaseWorker(EventHandler):
+class BaseWorker:
     """ワーカーの基底クラス"""
     
     def __init__(self, worker_id: str, config: WorkerConfig):
@@ -81,7 +65,7 @@ class BaseWorker(EventHandler):
         return event_type in self.subscriptions
         
     async def handle(self, event: Event) -> None:
-        """EventHandlerインターフェースの実装"""
+        """イベントハンドラーインターフェース"""
         await self.handle_event(event)
         
     async def initialize(self, event_bus: EventBus, state_manager: StateManager, 
@@ -91,8 +75,9 @@ class BaseWorker(EventHandler):
         self.state_manager = state_manager
         self.metrics = metrics
         
-        # イベント購読（EventHandlerとして登録）
-        await self.event_bus.subscribe(self)
+        # イベント購読
+        for event_type in self.subscriptions:
+            await self.event_bus.subscribe(event_type, self.handle)
             
         logger.info(f"Worker {self.worker_id} initialized")
         
@@ -270,14 +255,14 @@ class MockAggregatorWorker(BaseWorker):
             del self.completion_tracker[workflow_id]
 
 
-class WorkflowCompletionHandler(EventHandler):
+class WorkflowCompletionHandler:
     """ワークフロー完了ハンドラー"""
     
     def __init__(self, orchestrator):
         self.orchestrator = orchestrator
         
     def can_handle(self, event_type: EventType) -> bool:
-        """処理可能なイベントタイプをチェック"""
+        """処理可能なイベントタイプかチェック"""
         return event_type in {EventType.WORKFLOW_COMPLETED, EventType.WORKFLOW_FAILED}
         
     async def handle(self, event: Event) -> None:
@@ -291,123 +276,179 @@ class WorkflowCompletionHandler(EventHandler):
 class WorkflowOrchestrator:
     """ワークフロー全体を制御するオーケストレーター"""
     
-    def __init__(self, max_concurrent_workflows: int = 5):
-        self.max_concurrent_workflows = max_concurrent_workflows
-        self.event_bus = EventBus()
-        self.state_manager = StateManager()
+    def __init__(self, config: Config):
+        """初期化."""
+        self.config = config
+        self.event_bus = EventBus(config)
+        self.state_manager = StateManager(config)
         self.metrics = MetricsCollector()
-        self.workflow_metrics = WorkflowMetrics(self.metrics)
-        
-        # ワーカープール
-        self.workers: List[BaseWorker] = []
-        self.active_workflows: Dict[str, WorkflowContext] = {}
-        self.completion_events: Dict[str, asyncio.Event] = {}
-        self.workflow_start_times: Dict[str, float] = {}  # ワークフロー開始時間を保存
-        
-        # セマフォで同時実行数を制限
-        self.workflow_semaphore = asyncio.Semaphore(max_concurrent_workflows)
-        
-        # 完了ハンドラー
-        self.completion_handler = WorkflowCompletionHandler(self)
+        self.worker_pool = WorkerPool(config)
+        self._running = False
         
     async def initialize(self):
-        """オーケストレーターの初期化"""
-        # イベントバス開始
+        """オーケストレーターの初期化."""
+        logger.info("Initializing orchestrator...")
+        
+        # 状態管理の初期化
+        await self.state_manager.initialize()
+        
+        # イベントバスの開始
         await self.event_bus.start()
         
-        # ワーカーの初期化
-        self.workers = [
-            MockParserWorker(),
-            MockAggregatorWorker()
-        ]
+        # ワーカープールの初期化
+        await self.worker_pool.initialize(self.event_bus, self.state_manager)
         
-        for worker in self.workers:
-            await worker.initialize(self.event_bus, self.state_manager, self.metrics)
-            
-        # 完了イベントの購読
-        await self.event_bus.subscribe(self.completion_handler)
-        
-        logger.info("WorkflowOrchestrator initialized")
+        self._running = True
+        logger.info("Orchestrator initialized successfully")
         
     async def shutdown(self):
-        """オーケストレーターの終了"""
-        await self.event_bus.stop()
-        logger.info("WorkflowOrchestrator shutdown")
+        """オーケストレーターのシャットダウン."""
+        logger.info("Shutting down orchestrator...")
         
-    async def execute_workflow(self, lang: str, title: str, 
-                             metadata: Optional[Dict[str, Any]] = None) -> WorkflowContext:
-        """ワークフローの実行"""
-        async with self.workflow_semaphore:
-            workflow_id = str(uuid.uuid4())
-            start_time = time.time()  # 開始時間を記録
+        self._running = False
+        
+        # ワーカープールの停止
+        await self.worker_pool.shutdown()
+        
+        # イベントバスの停止
+        await self.event_bus.stop()
+        
+        # 状態管理の終了
+        await self.state_manager.close()
+        
+        logger.info("Orchestrator shutdown completed")
+        
+    async def execute(self, lang: str, title: str, input_file: Optional[str] = None) -> WorkflowContext:
+        """ワークフローの実行."""
+        if not self._running:
+            await self.initialize()
             
-            # ワークフローコンテキストの作成
-            context = WorkflowContext(
-                workflow_id=workflow_id,
-                lang=lang,
-                title=title,
-                status=WorkflowStatus.INITIALIZED,
-                metadata=metadata or {}
-            )
+        # ワークフロー初期化
+        context = await self._initialize_workflow(lang, title, input_file)
+        
+        try:
+            logger.info(f"Starting workflow {context.workflow_id}")
             
-            # 完了イベントの準備
-            completion_event = asyncio.Event()
-            self.completion_events[workflow_id] = completion_event
-            self.active_workflows[workflow_id] = context
-            self.workflow_start_times[workflow_id] = start_time  # 開始時間を保存
+            # メトリクス記録
+            self.metrics.workflows_started.inc()
             
-            try:
-                # 状態管理に登録
-                await self.state_manager.create_workflow(
-                    workflow_id, lang, title, metadata
-                )
+            # ワーカープールの起動
+            await self.worker_pool.start()
+            
+            # 初期イベント発行
+            await self.event_bus.publish(Event(
+                type=EventType.WORKFLOW_STARTED,
+                workflow_id=context.workflow_id,
+                data={
+                    "lang": lang,
+                    "title": title,
+                    "input_file": input_file
+                }
+            ))
+            
+            # ワークフロー完了待機
+            await self._wait_for_completion(context)
+            
+            # 成功時の処理
+            context.status = WorkflowStatus.COMPLETED
+            await self.state_manager.save_workflow_state(context.workflow_id, {
+                "status": context.status.value,
+                "completed_at": time.time()
+            })
+            
+            self.metrics.workflows_completed.inc()
+            logger.info(f"Workflow {context.workflow_id} completed successfully")
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Workflow {context.workflow_id} failed: {e}")
+            await self._handle_failure(context, e)
+            raise
+        finally:
+            await self.worker_pool.stop()
+    
+    async def resume(self, workflow_id: str) -> WorkflowContext:
+        """中断したワークフローの再開."""
+        logger.info(f"Resuming workflow {workflow_id}")
+        
+        # 状態の復元
+        context = await self.state_manager.load_context(workflow_id)
+        if not context:
+            raise ValueError(f"Workflow {workflow_id} not found")
+            
+        checkpoint = await self.state_manager.get_latest_checkpoint(workflow_id)
+        
+        # チェックポイントからイベントを再構築
+        await self._replay_from_checkpoint(context, checkpoint)
+        
+        # 実行を継続
+        return await self.execute(context.lang, context.title, context.input_file)
+    
+    async def _initialize_workflow(self, lang: str, title: str, input_file: Optional[str]) -> WorkflowContext:
+        """ワークフローの初期化."""
+        workflow_id = f"workflow-{uuid.uuid4().hex[:8]}"
+        
+        context = WorkflowContext(
+            workflow_id=workflow_id,
+            lang=lang,
+            title=title,
+            status=WorkflowStatus.INITIALIZED,
+            metadata={
+                "lang": lang,
+                "title": title,
+                "input_file": input_file,
+                "created_at": time.time()
+            },
+            checkpoints=[],
+            input_file=input_file
+        )
+        
+        # 初期状態を保存
+        await self.state_manager.save_workflow_state(workflow_id, {
+            "status": context.status.value,
+            "lang": lang,
+            "title": title,
+            "input_file": input_file,
+            "created_at": context.created_at
+        })
+        
+        return context
+    
+    async def _wait_for_completion(self, context: WorkflowContext, timeout: float = 3600):
+        """ワークフロー完了の待機."""
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            # 状態をチェック
+            state = await self.state_manager.get_workflow_state(context.workflow_id)
+            if state and state.get("status") == "completed":
+                return
                 
-                # メトリクス記録
-                self.workflow_metrics.record_workflow_started(workflow_id)
-                self.workflow_metrics.set_active_workflows(len(self.active_workflows))
-                
-                # ワークフロー開始
-                context.update_status(WorkflowStatus.RUNNING)
-                await self.state_manager.update_workflow_state(workflow_id, status=WorkflowStatus.RUNNING)
-                
-                # 初期イベント発行
-                start_event = Event(
-                    type=EventType.WORKFLOW_STARTED,
-                    workflow_id=workflow_id,
-                    data={"lang": lang, "title": title, "metadata": metadata}
-                )
-                await self.event_bus.publish(start_event)
-                
-                logger.info(f"Started workflow {workflow_id}: {title}")
-                
-                # 完了待機（タイムアウト付き）
-                try:
-                    await asyncio.wait_for(completion_event.wait(), timeout=300.0)
-                except asyncio.TimeoutError:
-                    context.update_status(WorkflowStatus.FAILED)
-                    await self.state_manager.update_workflow_state(workflow_id, status=WorkflowStatus.FAILED)
-                    self.workflow_metrics.record_workflow_failed(workflow_id, "timeout")
-                    raise TimeoutError(f"Workflow {workflow_id} timed out")
-                
-                return context
-                
-            except Exception as e:
-                context.update_status(WorkflowStatus.FAILED)
-                await self.state_manager.update_workflow_state(workflow_id, status=WorkflowStatus.FAILED)
-                self.workflow_metrics.record_workflow_failed(workflow_id, str(e))
-                logger.error(f"Workflow {workflow_id} failed: {e}")
-                raise
-                
-            finally:
-                # クリーンアップ
-                if workflow_id in self.completion_events:
-                    del self.completion_events[workflow_id]
-                if workflow_id in self.active_workflows:
-                    del self.active_workflows[workflow_id]
-                if workflow_id in self.workflow_start_times:
-                    del self.workflow_start_times[workflow_id]
-                self.workflow_metrics.set_active_workflows(len(self.active_workflows))
-                
+            # 少し待機
+            await asyncio.sleep(1)
+            
+        raise TimeoutError(f"Workflow {context.workflow_id} timed out")
+    
+    async def _handle_failure(self, context: WorkflowContext, error: Exception):
+        """失敗処理."""
+        context.status = WorkflowStatus.FAILED
+        
+        await self.state_manager.save_workflow_state(context.workflow_id, {
+            "status": context.status.value,
+            "error": str(error),
+            "failed_at": time.time()
+        })
+        
+        self.metrics.workflows_failed.inc()
+    
+    async def _replay_from_checkpoint(self, context: WorkflowContext, checkpoint: Dict):
+        """チェックポイントからのリプレイ."""
+        logger.info(f"Replaying from checkpoint: {checkpoint.get('step', 'unknown') if checkpoint else 'none'}")
+        # チェックポイントからの復元ロジックを実装
+        # Phase 1では基本的な実装のみ
+        pass
+        
     async def _handle_workflow_completion(self, event: Event):
         """ワークフロー完了ハンドラー"""
         workflow_id = event.workflow_id

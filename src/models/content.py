@@ -1,148 +1,88 @@
-"""コンテンツ関連のデータモデル."""
+"""コンテンツモデル."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List
+from pathlib import Path
 
 
 @dataclass
 class Content:
-    """基本コンテンツクラス."""
+    """コンテンツデータモデル."""
     
-    id: str
     title: str
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    content_type: str = "text"
+    metadata: Dict[str, Any] = None
     
-    def to_dict(self) -> Dict[str, Any]:
-        """辞書形式に変換."""
-        return {
-            "id": self.id,
-            "title": self.title,
-            "content": self.content,
-            "metadata": self.metadata,
-        }
+    def __post_init__(self):
+        """初期化後処理."""
+        if self.metadata is None:
+            self.metadata = {}
     
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Content:
-        """辞書からインスタンスを作成."""
-        return cls(
-            id=data["id"],
-            title=data["title"],
-            content=data["content"],
-            metadata=data.get("metadata", {}),
-        )
+    @property
+    def word_count(self) -> int:
+        """単語数を取得."""
+        return len(self.content.split())
+    
+    @property
+    def char_count(self) -> int:
+        """文字数を取得."""
+        return len(self.content)
+    
+    def is_empty(self) -> bool:
+        """コンテンツが空かどうか."""
+        return not self.content or not self.content.strip()
 
 
 @dataclass
-class Paragraph(Content):
-    """パラグラフクラス."""
+class Chapter:
+    """章モデル."""
     
-    type: str = ""
-    order: int = 0
-    content_focus: str = ""
-    original_text: str = ""
-    content_sequence: List[Dict[str, Any]] = field(default_factory=list)
+    index: int
+    title: str
+    content: str
+    sections: List['Section'] = None
+    metadata: Dict[str, Any] = None
     
-    def to_dict(self) -> Dict[str, Any]:
-        """辞書形式に変換."""
-        data = super().to_dict()
-        data.update({
-            "type": self.type,
-            "order": self.order,
-            "content_focus": self.content_focus,
-            "original_text": self.original_text,
-            "content_sequence": self.content_sequence,
-        })
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Paragraph:
-        """辞書からインスタンスを作成."""
-        return cls(
-            id=data["id"],
-            title=data["title"],
-            content=data["content"],
-            metadata=data.get("metadata", {}),
-            type=data.get("type", ""),
-            order=data.get("order", 0),
-            content_focus=data.get("content_focus", ""),
-            original_text=data.get("original_text", ""),
-            content_sequence=data.get("content_sequence", []),
-        )
-
-
-@dataclass 
-class Section(Content):
-    """セクションクラス."""
-    
-    index: int = 0
-    learning_objectives: List[str] = field(default_factory=list)
-    paragraphs: List[Paragraph] = field(default_factory=list)
-    
-    def add_paragraph(self, paragraph: Paragraph) -> None:
-        """パラグラフを追加."""
-        self.paragraphs.append(paragraph)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """辞書形式に変換."""
-        data = super().to_dict()
-        data.update({
-            "index": self.index,
-            "learning_objectives": self.learning_objectives,
-            "paragraphs": [p.to_dict() for p in self.paragraphs],
-        })
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Section:
-        """辞書からインスタンスを作成."""
-        paragraphs = [
-            Paragraph.from_dict(p) for p in data.get("paragraphs", [])
-        ]
-        return cls(
-            id=data["id"],
-            title=data["title"],
-            content=data["content"],
-            metadata=data.get("metadata", {}),
-            index=data.get("index", 0),
-            learning_objectives=data.get("learning_objectives", []),
-            paragraphs=paragraphs,
-        )
+    def __post_init__(self):
+        """初期化後処理."""
+        if self.sections is None:
+            self.sections = []
+        if self.metadata is None:
+            self.metadata = {}
 
 
 @dataclass
-class Chapter(Content):
-    """チャプタークラス."""
+class Section:
+    """セクションモデル."""
     
-    index: int = 0
-    sections: List[Section] = field(default_factory=list)
+    index: int
+    title: str
+    content: str
+    chapter_index: int
+    paragraphs: List['Paragraph'] = None
+    metadata: Dict[str, Any] = None
     
-    def add_section(self, section: Section) -> None:
-        """セクションを追加."""
-        self.sections.append(section)
+    def __post_init__(self):
+        """初期化後処理."""
+        if self.paragraphs is None:
+            self.paragraphs = []
+        if self.metadata is None:
+            self.metadata = {}
+
+
+@dataclass
+class Paragraph:
+    """パラグラフモデル."""
     
-    def to_dict(self) -> Dict[str, Any]:
-        """辞書形式に変換."""
-        data = super().to_dict()
-        data.update({
-            "index": self.index,
-            "sections": [s.to_dict() for s in self.sections],
-        })
-        return data
+    index: int
+    content: str
+    section_index: int
+    chapter_index: int
+    content_type: str = "text"
+    metadata: Dict[str, Any] = None
     
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Chapter:
-        """辞書からインスタンスを作成."""
-        sections = [
-            Section.from_dict(s) for s in data.get("sections", [])
-        ]
-        return cls(
-            id=data["id"],
-            title=data["title"],
-            content=data["content"],
-            metadata=data.get("metadata", {}),
-            index=data.get("index", 0),
-            sections=sections,
-        ) 
+    def __post_init__(self):
+        """初期化後処理."""
+        if self.metadata is None:
+            self.metadata = {} 

@@ -15,6 +15,7 @@ from .structure import (
     StructureElement,
     DocumentStructure
 )
+from .markdown import MarkdownProcessor
 
 __all__ = [
     "BaseProcessor",
@@ -27,5 +28,6 @@ __all__ = [
     "ParagraphProcessor",
     "StructureProcessor",
     "StructureElement",
-    "DocumentStructure"
+    "DocumentStructure",
+    "MarkdownProcessor"
 ] 

@@ -20,6 +20,30 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
+# Prometheusクライアントの可用性をチェック
+try:
+    from prometheus_client import Counter, Histogram, Gauge, Summary
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # モック実装
+    class MockMetric:
+        def inc(self, amount=1):
+            pass
+        def dec(self, amount=1):
+            pass
+        def set(self, value):
+            pass
+        def observe(self, value):
+            pass
+        def labels(self, **labels):
+            return MockMetric()
+    
+    Counter = MockMetric
+    Histogram = MockMetric
+    Gauge = MockMetric
+    Summary = MockMetric
+
 
 class MetricType(Enum):
     """メトリクスタイプ"""
@@ -60,6 +84,14 @@ class AlertRule:
     last_triggered: float = 0.0
 
 
+@dataclass
+class MetricValue:
+    """メトリクス値."""
+    value: float
+    timestamp: float = field(default_factory=time.time)
+    labels: Dict[str, str] = field(default_factory=dict)
+
+
 class MetricsCollector:
     """メトリクス収集システム
     
@@ -89,6 +121,83 @@ class MetricsCollector:
         # 統計情報
         self._start_time = time.time()
         self._total_metrics_collected = 0
+        
+        self._initialize_metrics()
+        
+    def _initialize_metrics(self):
+        """メトリクスの初期化."""
+        # カウンター
+        self.workflows_started = Counter(
+            'workflows_started_total',
+            'Total number of workflows started'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.workflows_completed = Counter(
+            'workflows_completed_total',
+            'Total number of workflows completed'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.workflows_failed = Counter(
+            'workflows_failed_total',
+            'Total number of workflows failed'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.events_published = Counter(
+            'events_published_total',
+            'Total number of events published',
+            ['event_type']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.events_processed = Counter(
+            'events_processed_total',
+            'Total number of events processed',
+            ['event_type', 'status']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        # ヒストグラム
+        self.processing_time = Histogram(
+            'processing_time_seconds',
+            'Time spent processing',
+            ['task_type']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.api_response_time = Histogram(
+            'api_response_time_seconds',
+            'API response time',
+            ['api_name', 'endpoint']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.workflow_duration = Histogram(
+            'workflow_duration_seconds',
+            'Workflow execution duration'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        # ゲージ
+        self.active_workers = Gauge(
+            'active_workers',
+            'Number of active workers',
+            ['worker_type']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.queue_size = Gauge(
+            'queue_size',
+            'Current queue size',
+            ['queue_name']
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        self.active_workflows = Gauge(
+            'active_workflows_total',
+            'Number of currently active workflows'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        # サマリー
+        self.content_generation_quality = Summary(
+            'content_generation_quality',
+            'Quality score of generated content'
+        ) if PROMETHEUS_AVAILABLE else MockMetric()
+        
+        # 内部メトリクス（非Prometheus）
+        self._internal_metrics: Dict[str, Any] = {}
         
     def increment_counter(self, name: str, value: float = 1.0, labels: Optional[Dict[str, str]] = None) -> None:
         """カウンターをインクリメント"""
@@ -147,14 +256,24 @@ class MetricsCollector:
             ))
     
     @contextmanager
-    def measure_time(self, name: str, labels: Optional[Dict[str, str]] = None):
-        """時間測定のコンテキストマネージャー"""
-        start_time = time.time()
+    def measure_time(self, metric_name: str, labels: Dict[str, str] = None):
+        """処理時間の計測."""
+        start = time.time()
         try:
             yield
         finally:
-            duration = time.time() - start_time
-            self.record_timer(name, duration, labels)
+            duration = time.time() - start
+            
+            # Prometheusメトリクスに記録
+            if hasattr(self, metric_name) and PROMETHEUS_AVAILABLE:
+                metric = getattr(self, metric_name)
+                if labels:
+                    metric.labels(**labels).observe(duration)
+                else:
+                    metric.observe(duration)
+            
+            # 内部メトリクスに記録
+            self._record_internal_metric(metric_name, duration, labels)
     
     def get_counter(self, name: str, labels: Optional[Dict[str, str]] = None) -> float:
         """カウンター値を取得"""
@@ -383,6 +502,100 @@ class MetricsCollector:
         
         return sorted_values[index]
 
+    def _record_internal_metric(self, name: str, value: float, labels: Dict[str, str] = None):
+        """内部メトリクスの記録."""
+        metric_key = f"{name}:{str(labels) if labels else 'default'}"
+        
+        if metric_key not in self._internal_metrics:
+            self._internal_metrics[metric_key] = []
+            
+        self._internal_metrics[metric_key].append(MetricValue(
+            value=value,
+            labels=labels or {}
+        ))
+        
+        # 古いメトリクスを削除（最新100件のみ保持）
+        if len(self._internal_metrics[metric_key]) > 100:
+            self._internal_metrics[metric_key] = self._internal_metrics[metric_key][-100:]
+            
+    def record_workflow_started(self, workflow_id: str):
+        """ワークフロー開始の記録."""
+        self.workflows_started.inc()
+        logger.debug(f"Recorded workflow started: {workflow_id}")
+        
+    def record_workflow_completed(self, workflow_id: str, duration: float):
+        """ワークフロー完了の記録."""
+        self.workflows_completed.inc()
+        self.workflow_duration.observe(duration)
+        logger.debug(f"Recorded workflow completed: {workflow_id} in {duration:.2f}s")
+        
+    def record_workflow_failed(self, workflow_id: str, error: str):
+        """ワークフロー失敗の記録."""
+        self.workflows_failed.inc()
+        logger.debug(f"Recorded workflow failed: {workflow_id} - {error}")
+        
+    def record_event_published(self, event_type: str):
+        """イベント発行の記録."""
+        if PROMETHEUS_AVAILABLE:
+            self.events_published.labels(event_type=event_type).inc()
+        
+    def record_event_processed(self, event_type: str, status: str):
+        """イベント処理の記録."""
+        if PROMETHEUS_AVAILABLE:
+            self.events_processed.labels(event_type=event_type, status=status).inc()
+        
+    def set_active_workers(self, worker_type: str, count: int):
+        """アクティブワーカー数の設定."""
+        if PROMETHEUS_AVAILABLE:
+            self.active_workers.labels(worker_type=worker_type).set(count)
+        
+    def set_queue_size(self, queue_name: str, size: int):
+        """キューサイズの設定."""
+        if PROMETHEUS_AVAILABLE:
+            self.queue_size.labels(queue_name=queue_name).set(size)
+        
+    def set_active_workflows(self, count: int):
+        """アクティブワークフロー数の設定."""
+        self.active_workflows.set(count)
+        
+    def record_api_call(self, api_name: str, endpoint: str, response_time: float):
+        """API呼び出しの記録."""
+        if PROMETHEUS_AVAILABLE:
+            self.api_response_time.labels(api_name=api_name, endpoint=endpoint).observe(response_time)
+        
+    def record_content_quality(self, quality_score: float):
+        """コンテンツ品質の記録."""
+        self.content_generation_quality.observe(quality_score)
+        
+    def get_internal_metrics(self, metric_name: Optional[str] = None) -> Dict[str, Any]:
+        """内部メトリクスの取得."""
+        if metric_name:
+            return {k: v for k, v in self._internal_metrics.items() if k.startswith(metric_name)}
+        return self._internal_metrics.copy()
+        
+    def get_metric_summary(self) -> Dict[str, Any]:
+        """メトリクスサマリーの取得."""
+        summary = {}
+        
+        # 内部メトリクスの統計
+        for metric_key, values in self._internal_metrics.items():
+            if values:
+                metric_values = [v.value for v in values]
+                summary[metric_key] = {
+                    "count": len(metric_values),
+                    "min": min(metric_values),
+                    "max": max(metric_values),
+                    "avg": sum(metric_values) / len(metric_values),
+                    "latest": metric_values[-1]
+                }
+                
+        return summary
+        
+    def clear_internal_metrics(self):
+        """内部メトリクスのクリア."""
+        self._internal_metrics.clear()
+        logger.info("Internal metrics cleared")
+
 
 class WorkflowMetrics:
     """ワークフロー専用メトリクス収集クラス"""
@@ -449,4 +662,48 @@ class WorkflowMetrics:
             "queue_size",
             size,
             labels={"queue": queue_name}
-        ) 
+        )
+
+
+class PerformanceMonitor:
+    """パフォーマンス監視."""
+    
+    def __init__(self, metrics_collector: MetricsCollector):
+        """初期化."""
+        self.metrics = metrics_collector
+        self._thresholds = {
+            "workflow_duration": 300.0,  # 5分
+            "api_response_time": 10.0,   # 10秒
+            "queue_size": 1000           # 1000件
+        }
+        
+    def check_performance_thresholds(self) -> List[str]:
+        """パフォーマンス閾値のチェック."""
+        warnings = []
+        
+        # 内部メトリクスから最新値をチェック
+        metrics = self.metrics.get_internal_metrics()
+        
+        for metric_key, values in metrics.items():
+            if not values:
+                continue
+                
+            latest_value = values[-1].value
+            
+            # 閾値チェック
+            for threshold_key, threshold_value in self._thresholds.items():
+                if threshold_key in metric_key and latest_value > threshold_value:
+                    warnings.append(
+                        f"Performance warning: {metric_key} = {latest_value:.2f} "
+                        f"exceeds threshold {threshold_value:.2f}"
+                    )
+                    
+        return warnings
+        
+    def set_threshold(self, metric: str, value: float):
+        """閾値の設定."""
+        self._thresholds[metric] = value
+        
+    def get_thresholds(self) -> Dict[str, float]:
+        """閾値の取得."""
+        return self._thresholds.copy() 

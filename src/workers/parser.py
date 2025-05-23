@@ -1,293 +1,302 @@
-"""パーサーワーカー."""
+"""パーサーワーカー - コンテンツ解析と分割を担当."""
 
+import asyncio
 import logging
-from typing import Set, Dict, Any
+from typing import Set, List, Dict, Any
+from pathlib import Path
 
-from .base import BaseWorker, Event, EventType
-from ..config import Config
+from .base import BaseWorker
+from ..core.events import Event, EventType
 
 logger = logging.getLogger(__name__)
 
 
 class ParserWorker(BaseWorker):
-    """パーサーワーカー."""
+    """コンテンツ解析ワーカー."""
     
-    def __init__(self, config: Config, worker_id: str = "parser_worker"):
-        """初期化."""
-        super().__init__(config, worker_id)
-        
-    def get_subscriptions(self) -> Set[str]:
+    def get_subscriptions(self) -> Set[EventType]:
         """購読するイベントタイプを返す."""
         return {
             EventType.WORKFLOW_STARTED,
             EventType.CHAPTER_PARSED,
-            EventType.SECTION_PARSED
+            EventType.SECTION_PARSED,
+            EventType.STRUCTURE_ANALYZED
         }
         
     async def process(self, event: Event) -> None:
         """イベントを処理."""
-        try:
-            if event.type == EventType.WORKFLOW_STARTED:
-                await self._handle_workflow_started(event)
-            elif event.type == EventType.CHAPTER_PARSED:
-                await self._handle_chapter_parsed(event)
-            elif event.type == EventType.SECTION_PARSED:
-                await self._handle_section_parsed(event)
-            else:
-                logger.warning(f"Unhandled event type: {event.type}")
-                
-        except Exception as e:
-            logger.error(f"Parser worker error: {e}")
-            raise
+        if event.type == EventType.WORKFLOW_STARTED:
+            await self._parse_document(event)
+        elif event.type == EventType.CHAPTER_PARSED:
+            await self._parse_sections(event)
+        elif event.type == EventType.SECTION_PARSED:
+            await self._request_structure_analysis(event)
+        elif event.type == EventType.STRUCTURE_ANALYZED:
+            await self._parse_paragraphs(event)
             
-    async def _handle_workflow_started(self, event: Event) -> None:
-        """ワークフロー開始イベントの処理."""
-        logger.info(f"Starting content parsing for workflow {event.workflow_id}")
+    async def _parse_document(self, event: Event):
+        """ドキュメントをチャプターに分割."""
+        logger.info(f"Starting document parsing for workflow {event.workflow_id}")
         
-        # イベントデータから必要な情報を取得
-        content_data = event.data.get('content')
-        if not content_data:
-            raise ValueError("No content data provided")
-            
-        # コンテンツの構造解析
-        structure = await self._analyze_content_structure(content_data)
+        # 入力ファイルの取得
+        input_file = event.data.get("input_file")
+        if not input_file:
+            logger.warning("No input file specified, using default content")
+            content = self._get_default_content(event.data)
+        else:
+            content = await self._read_file(input_file)
         
-        # 構造解析完了イベントを発行
-        if self.event_bus:
-            structure_event = Event(
-                event_type=EventType.STRUCTURE_ANALYZED,
-                workflow_id=event.workflow_id,
-                data={
-                    'structure': structure,
-                    'original_content': content_data
-                },
-                trace_id=event.trace_id
-            )
-            await self.event_bus.publish(structure_event)
-            
-        # チャプター解析の開始
-        for chapter_data in structure.get('chapters', []):
-            chapter_event = Event(
-                event_type=EventType.CHAPTER_PARSED,
-                workflow_id=event.workflow_id,
-                data={
-                    'chapter': chapter_data,
-                    'structure': structure
-                },
-                trace_id=event.trace_id
-            )
-            await self.event_bus.publish(chapter_event)
-            
-    async def _handle_chapter_parsed(self, event: Event) -> None:
-        """チャプター解析イベントの処理."""
-        chapter_data = event.data.get('chapter')
-        if not chapter_data:
-            raise ValueError("No chapter data provided")
-            
-        logger.info(f"Processing chapter: {chapter_data.get('title', 'Unknown')}")
+        # チャプターに分割
+        chapters = self._split_by_chapters(content)
         
-        # チャプター内のセクションを解析
-        sections = await self._parse_chapter_sections(chapter_data)
-        
-        # 各セクションに対してイベントを発行
-        for section_data in sections:
-            section_event = Event(
-                event_type=EventType.SECTION_PARSED,
-                workflow_id=event.workflow_id,
-                data={
-                    'section': section_data,
-                    'chapter': chapter_data
-                },
-                trace_id=event.trace_id
-            )
-            await self.event_bus.publish(section_event)
-            
-    async def _handle_section_parsed(self, event: Event) -> None:
-        """セクション解析イベントの処理."""
-        section_data = event.data.get('section')
-        if not section_data:
-            raise ValueError("No section data provided")
-            
-        logger.info(f"Processing section: {section_data.get('title', 'Unknown')}")
-        
-        # セクション内のパラグラフを解析
-        paragraphs = await self._parse_section_paragraphs(section_data)
-        
-        # 各パラグラフに対してイベントを発行
-        for paragraph_data in paragraphs:
-            paragraph_event = Event(
-                event_type=EventType.PARAGRAPH_PARSED,
-                workflow_id=event.workflow_id,
-                data={
-                    'paragraph': paragraph_data,
-                    'section': section_data
-                },
-                trace_id=event.trace_id
-            )
-            await self.event_bus.publish(paragraph_event)
-            
-    async def _analyze_content_structure(self, content_data: Dict[str, Any]) -> Dict[str, Any]:
-        """コンテンツの構造を解析."""
-        content_text = content_data.get('text', '')
-        
-        # 簡易的な構造解析
-        structure = {
-            'type': 'document',
-            'title': content_data.get('title', 'Untitled'),
-            'chapters': [],
-            'metadata': {
-                'total_length': len(content_text),
-                'estimated_chapters': 0,
-                'estimated_sections': 0
+        # 各チャプターでイベントを発行
+        for idx, chapter in enumerate(chapters):
+            chapter_data = {
+                "index": idx,
+                "title": chapter["title"],
+                "content": chapter["content"],
+                "path": self._get_chapter_path(event.data, idx, chapter["title"])
             }
-        }
+            
+            await self.event_bus.publish(Event(
+                type=EventType.CHAPTER_PARSED,
+                workflow_id=event.workflow_id,
+                data=chapter_data,
+                priority=idx  # 順序を保持
+            ))
+            
+        logger.info(f"Document parsed into {len(chapters)} chapters")
         
-        # チャプターの検出（見出しレベル1）
-        chapters = self._extract_chapters(content_text)
-        structure['chapters'] = chapters
-        structure['metadata']['estimated_chapters'] = len(chapters)
+    async def _parse_sections(self, event: Event):
+        """チャプターをセクションに分割."""
+        chapter_content = event.data.get("content", "")
+        chapter_index = event.data.get("index", 0)
         
-        # セクション数の推定
-        total_sections = sum(len(chapter.get('sections', [])) for chapter in chapters)
-        structure['metadata']['estimated_sections'] = total_sections
+        logger.info(f"Parsing chapter {chapter_index} into sections")
         
-        return structure
+        # セクションに分割
+        sections = self._split_by_sections(chapter_content)
         
-    def _extract_chapters(self, content: str) -> list[Dict[str, Any]]:
-        """コンテンツからチャプターを抽出."""
+        # 各セクションでイベントを発行
+        for idx, section in enumerate(sections):
+            section_data = {
+                "chapter_index": chapter_index,
+                "section_index": idx,
+                "title": section["title"],
+                "content": section["content"],
+                "level": section["level"]
+            }
+            
+            await self.event_bus.publish(Event(
+                type=EventType.SECTION_PARSED,
+                workflow_id=event.workflow_id,
+                data=section_data
+            ))
+            
+        logger.debug(f"Chapter {chapter_index} parsed into {len(sections)} sections")
+        
+    async def _request_structure_analysis(self, event: Event):
+        """構造解析をリクエスト."""
+        # AIワーカーに構造解析を依頼
+        await self.event_bus.publish(Event(
+            type=EventType.STRUCTURE_ANALYZED,
+            workflow_id=event.workflow_id,
+            data=event.data
+        ))
+        
+    async def _parse_paragraphs(self, event: Event):
+        """セクションをパラグラフに分割."""
+        section_content = event.data.get("content", "")
+        chapter_index = event.data.get("chapter_index", 0)
+        section_index = event.data.get("section_index", 0)
+        
+        logger.debug(f"Parsing section {chapter_index}-{section_index} into paragraphs")
+        
+        # パラグラフに分割
+        paragraphs = self._split_by_paragraphs(section_content)
+        
+        # 各パラグラフでイベントを発行
+        for idx, paragraph in enumerate(paragraphs):
+            paragraph_data = {
+                "chapter_index": chapter_index,
+                "section_index": section_index,
+                "paragraph_index": idx,
+                "content": paragraph,
+                "title": event.data.get("title", f"Paragraph {idx+1}")
+            }
+            
+            await self.event_bus.publish(Event(
+                type=EventType.PARAGRAPH_PARSED,
+                workflow_id=event.workflow_id,
+                data=paragraph_data
+            ))
+            
+        logger.debug(f"Section {chapter_index}-{section_index} parsed into {len(paragraphs)} paragraphs")
+        
+    async def _read_file(self, file_path: str) -> str:
+        """ファイルを読み込み."""
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Input file not found: {file_path}")
+                
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Failed to read file {file_path}: {e}")
+            return self._get_default_content({"title": "Error"})
+            
+    def _get_default_content(self, data: Dict[str, Any]) -> str:
+        """デフォルトコンテンツを取得."""
+        title = data.get("title", "Sample Content")
+        return f"""# {title}
+
+## はじめに
+
+これはサンプルコンテンツです。実際のMarkdownファイルを指定してください。
+
+## 本文
+
+### セクション 1
+
+ここに本文の内容が入ります。
+
+### セクション 2
+
+追加の内容があります。
+
+## まとめ
+
+以上が{title}の内容です。
+"""
+        
+    def _split_by_chapters(self, content: str) -> List[Dict[str, Any]]:
+        """コンテンツをチャプターに分割."""
         chapters = []
         lines = content.split('\n')
         current_chapter = None
         current_content = []
         
         for line in lines:
-            line = line.strip()
-            
-            # レベル1見出し（チャプター）の検出
-            if line.startswith('# ') and not line.startswith('## '):
+            # H1見出し（チャプター）をチェック
+            if line.startswith('# '):
                 # 前のチャプターを保存
                 if current_chapter:
-                    current_chapter['content'] = '\n'.join(current_content)
-                    current_chapter['sections'] = self._extract_sections('\n'.join(current_content))
-                    chapters.append(current_chapter)
+                    chapters.append({
+                        "title": current_chapter,
+                        "content": '\n'.join(current_content).strip()
+                    })
                 
-                # 新しいチャプターを開始
-                current_chapter = {
-                    'title': line[2:].strip(),
-                    'level': 1,
-                    'content': '',
-                    'sections': []
-                }
+                # 新しいチャプター開始
+                current_chapter = line[2:].strip()
                 current_content = []
             else:
-                if current_chapter:
-                    current_content.append(line)
-                    
+                current_content.append(line)
+        
         # 最後のチャプターを保存
         if current_chapter:
-            current_chapter['content'] = '\n'.join(current_content)
-            current_chapter['sections'] = self._extract_sections('\n'.join(current_content))
-            chapters.append(current_chapter)
-            
-        # チャプターが見つからない場合は、全体を1つのチャプターとして扱う
+            chapters.append({
+                "title": current_chapter,
+                "content": '\n'.join(current_content).strip()
+            })
+        
+        # チャプターがない場合は全体を1つのチャプターとする
         if not chapters:
             chapters.append({
-                'title': 'Main Content',
-                'level': 1,
-                'content': content,
-                'sections': self._extract_sections(content)
+                "title": "Main Content",
+                "content": content.strip()
             })
             
         return chapters
         
-    def _extract_sections(self, content: str) -> list[Dict[str, Any]]:
-        """コンテンツからセクションを抽出."""
+    def _split_by_sections(self, content: str) -> List[Dict[str, Any]]:
+        """コンテンツをセクションに分割."""
         sections = []
         lines = content.split('\n')
         current_section = None
         current_content = []
+        current_level = 2  # H2レベルから開始
         
         for line in lines:
-            line = line.strip()
-            
-            # レベル2見出し（セクション）の検出
-            if line.startswith('## ') and not line.startswith('### '):
-                # 前のセクションを保存
-                if current_section:
-                    current_section['content'] = '\n'.join(current_content)
-                    current_section['paragraphs'] = self._extract_paragraphs('\n'.join(current_content))
-                    sections.append(current_section)
-                
-                # 新しいセクションを開始
-                current_section = {
-                    'title': line[3:].strip(),
-                    'level': 2,
-                    'content': '',
-                    'paragraphs': []
-                }
-                current_content = []
+            # 見出しレベルを判定
+            if line.startswith('## '):
+                level = 2
+                title = line[3:].strip()
+            elif line.startswith('### '):
+                level = 3
+                title = line[4:].strip()
+            elif line.startswith('#### '):
+                level = 4
+                title = line[5:].strip()
             else:
-                if current_section:
-                    current_content.append(line)
-                    
+                current_content.append(line)
+                continue
+            
+            # 前のセクションを保存
+            if current_section:
+                sections.append({
+                    "title": current_section,
+                    "content": '\n'.join(current_content).strip(),
+                    "level": current_level
+                })
+            
+            # 新しいセクション開始
+            current_section = title
+            current_level = level
+            current_content = []
+        
         # 最後のセクションを保存
         if current_section:
-            current_section['content'] = '\n'.join(current_content)
-            current_section['paragraphs'] = self._extract_paragraphs('\n'.join(current_content))
-            sections.append(current_section)
-            
-        # セクションが見つからない場合は、全体を1つのセクションとして扱う
+            sections.append({
+                "title": current_section,
+                "content": '\n'.join(current_content).strip(),
+                "level": current_level
+            })
+        
+        # セクションがない場合は全体を1つのセクションとする
         if not sections:
             sections.append({
-                'title': 'Main Section',
-                'level': 2,
-                'content': content,
-                'paragraphs': self._extract_paragraphs(content)
+                "title": "Main Section",
+                "content": content.strip(),
+                "level": 2
             })
             
         return sections
         
-    def _extract_paragraphs(self, content: str) -> list[Dict[str, Any]]:
-        """コンテンツからパラグラフを抽出."""
-        paragraphs = []
-        
+    def _split_by_paragraphs(self, content: str) -> List[str]:
+        """コンテンツをパラグラフに分割."""
         # 空行で分割してパラグラフを作成
-        raw_paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        paragraphs = []
+        current_paragraph = []
         
-        for i, paragraph_text in enumerate(raw_paragraphs):
+        for line in content.split('\n'):
+            line = line.strip()
+            
+            if not line:  # 空行
+                if current_paragraph:
+                    paragraph_text = '\n'.join(current_paragraph).strip()
+                    if paragraph_text:
+                        paragraphs.append(paragraph_text)
+                    current_paragraph = []
+            else:
+                current_paragraph.append(line)
+        
+        # 最後のパラグラフを追加
+        if current_paragraph:
+            paragraph_text = '\n'.join(current_paragraph).strip()
             if paragraph_text:
-                paragraphs.append({
-                    'index': i,
-                    'content': paragraph_text,
-                    'type': self._classify_paragraph_type(paragraph_text),
-                    'word_count': len(paragraph_text.split())
-                })
-                
+                paragraphs.append(paragraph_text)
+        
+        # パラグラフがない場合は全体を1つのパラグラフとする
+        if not paragraphs:
+            content_stripped = content.strip()
+            if content_stripped:
+                paragraphs.append(content_stripped)
+            
         return paragraphs
         
-    def _classify_paragraph_type(self, text: str) -> str:
-        """パラグラフのタイプを分類."""
-        text = text.strip()
-        
-        if text.startswith('###'):
-            return 'heading3'
-        elif text.startswith('- ') or text.startswith('* '):
-            return 'list'
-        elif text.startswith('> '):
-            return 'quote'
-        elif '```' in text:
-            return 'code'
-        elif len(text.split()) < 10:
-            return 'short'
-        else:
-            return 'paragraph'
-            
-    async def _parse_chapter_sections(self, chapter_data: Dict[str, Any]) -> list[Dict[str, Any]]:
-        """チャプター内のセクションを解析."""
-        # 既に解析済みのセクションデータを返す
-        return chapter_data.get('sections', [])
-        
-    async def _parse_section_paragraphs(self, section_data: Dict[str, Any]) -> list[Dict[str, Any]]:
-        """セクション内のパラグラフを解析."""
-        # 既に解析済みのパラグラフデータを返す
-        return section_data.get('paragraphs', []) 
+    def _get_chapter_path(self, data: Dict[str, Any], index: int, title: str) -> str:
+        """チャプターファイルパスを生成."""
+        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title.replace(' ', '_')
+        return f"chapter_{index:02d}_{safe_title}.md" 
