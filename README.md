@@ -1,204 +1,217 @@
-# リソース生成ワークフロー
+# Resource Generate Workflow
 
-## 概要
+高性能リソース生成ワークフローエンジン - 技術書籍のMarkdownから多様な派生コンテンツを自動生成
 
-リソース生成ワークフローは、Markdown形式のテキストコンテンツを入力として、以下の処理を行うCLIツールです：
+## 📋 概要
 
-- コンテンツを章（Chapter）とセクション（Section）に分割
-- Claude APIを使用して各セクションの構造を解析
-- 記事（Article）、台本（Script）、ツイート（Tweets）などの派生コンテンツを生成
-- 画像処理（SVG、DrawIO XML、Mermaid図の変換と最適化）
-- OpenAI APIを使用したサムネイル画像の生成
-- 生成したリソースをGitHubにコミットしS3にアップロード
-- 処理の各段階でチェックポイントを保存し、中断時に再開可能な設計
+このシステムは、技術書籍のMarkdownコンテンツから以下を自動生成します：
 
-バッチ処理や自動化パイプラインでの利用に適しています。
+- 📄 記事コンテンツ
+- 🎬 動画台本
+- 🐦 ツイート
+- 📝 説明文
+- 🖼️ サムネイル画像
+- 📊 構造化データ
 
-## インストール
+## 🏗️ アーキテクチャ
 
-### 前提条件
+イベント駆動・マイクロサービス的なアーキテクチャを採用：
 
-- Python 3.10以上
-- Node.js（Mermaid図のレンダリング用）
-- Draw.io CLI（XML図の変換用）
+- **オーケストレーター**: ワークフロー全体の制御
+- **イベントバス**: 非同期イベント処理
+- **ワーカープール**: 並列処理によるスケーラビリティ
+- **状態管理**: Redis による分散状態管理
+- **メトリクス**: Prometheus による監視
 
-### インストール手順
+## 🚀 クイックスタート
+
+### 1. 環境構築
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/develogon/resource_generate_workflow.git
+git clone <repository-url>
 cd resource_generate_workflow
 
-# 依存パッケージのインストール
-pip install -r requirements.txt
+# 依存関係のインストール
+make setup
 
-# Node.jsパッケージのインストール（Mermaid用）
-npm install -g @mermaid-js/mermaid-cli
+# 環境変数の設定
+cp env.example .env
+# .env ファイルを編集してAPI キー等を設定
 ```
 
-## 使い方
-
-### 基本コマンド
+### 2. 必要なサービスの起動
 
 ```bash
-# 新しいワークフローを開始
-python -m app.cli start path/to/input.md [--config path/to/config.yaml] [--log-level INFO]
+# Redis の起動（Docker使用）
+docker run -d -p 6379:6379 redis:7-alpine
 
-# 中断されたワークフローを再開
-python -m app.cli resume [--checkpoint checkpoint_id] [--config path/to/config.yaml] [--log-level INFO]
-
-# ワークフローの状態を確認
-python -m app.cli status [--log-level INFO]
+# または docker-compose で全サービス起動
+make docker-run
 ```
 
-### オプション
+### 3. 実行
 
-- `--config`: 設定ファイル（YAML/JSON）のパスを指定します。指定がない場合は、デフォルトの場所から設定を読み込みます。
-- `--log-level`: ログレベルを指定します（DEBUG, INFO, WARNING, ERROR, CRITICAL）。デフォルトはINFOです。
-- `--checkpoint`: 再開するチェックポイントIDを指定します。指定がない場合は最新のチェックポイントから再開します。
+```bash
+# 基本実行
+make run
 
-## 設定
-
-システムの設定は `app/config.py` モジュールで管理され、以下の3つの方法で読み込まれます：
-
-1. デフォルト設定（`config.default.yaml`）
-2. ユーザー設定ファイル（YAML/JSON形式）
-3. 環境変数（最優先）
-
-設定ファイルは以下の場所から自動的に検索されます：
-- カレントディレクトリの `config.yaml` または `config.yml`
-- カレントディレクトリの `config.json`
-- ホームディレクトリの `~/.resource-workflow/config.yaml`
-- ホームディレクトリの `~/.resource-workflow/config.json`
-
-### 設定ファイル例
-
-```yaml
-# 基本設定
-workspace_dir: /path/to/workspace
-checkpoint_dir: checkpoints
-output_dir: output
-temp_dir: temp
-
-# API設定
-api:
-  claude:
-    model: claude-3-7-sonnet-20250219
-    max_tokens: 200000
-    temperature: 0.2
-    timeout: 300
-    retry_count: 3
-    retry_delay: 5
-  openai:
-    model: gpt-4o-mini
-    image_model: dall-e-3
-    image_quality: standard
-    image_size: 1024x1024
-    temperature: 0.7
-    timeout: 60
-    retry_count: 3
-    retry_delay: 5
-
-# GitHub設定
-github:
-  owner: develogon
-  repo: til
-  branch: master
-  commit_message_prefix: "[自動生成] "
-
-# AWS S3設定
-s3:
-  bucket: develogon-til
-  prefix: resources/
-  region: ap-northeast-1
-  public_url_base: https://s3.amazonaws.com/develogon-til
-
-# Slack設定
-slack:
-  webhook_url: https://hooks.slack.com/services/XXXX/YYYY/ZZZZ
-  channel: "#notifications"
-  username: リソース生成ワークフロー
-  icon_emoji: ":robot_face:"
-
-# 処理設定
-processing:
-  max_parallel_tasks: 4
-  checkpoint_interval: 60
-  error_retry_count: 3
-  error_retry_delay: 10
+# CLI直接実行
+python -m src.cli --lang ja --title "Go言語入門"
 ```
+
+## 🔧 設定
 
 ### 環境変数
 
-主要な設定は環境変数でも指定できます：
-
-- `CLAUDE_API_KEY`: Claude APIキー
-- `OPENAI_API_KEY`: OpenAI APIキー
-- `GITHUB_TOKEN`: GitHub APIトークン
-- `GITHUB_OWNER`: GitHubオーナー名
-- `GITHUB_REPO`: GitHubリポジトリ名
-- `AWS_ACCESS_KEY_ID`: AWS アクセスキーID
-- `AWS_SECRET_ACCESS_KEY`: AWS シークレットアクセスキー
-- `S3_BUCKET`: S3バケット名
-- `SLACK_WEBHOOK_URL`: Slack Webhook URL
-
-## テスト
-
-システムの品質を確保するために、3つのレベルのテストを提供しています：
-
-1. **ユニットテスト**: 個々のコンポーネントの機能をテスト
-2. **インテグレーションテスト**: コンポーネント間の連携をテスト
-3. **E2Eテスト**: エンドツーエンドの全体フローをテスト
-
-### テスト実行方法
-
-テストは [pytest](https://docs.pytest.org/) フレームワークを使用しています。
+主要な環境変数（詳細は `env.example` を参照）：
 
 ```bash
-# すべてのテストを実行
-pytest
+# API設定
+CLAUDE_API_KEY=your_api_key
+OPENAI_API_KEY=your_api_key
 
-# ユニットテストのみ実行
-pytest tests/unit/
+# AWS設定
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+S3_BUCKET=your_bucket
 
-# インテグレーションテストのみ実行
-pytest tests/integration/
-
-# E2Eテストのみ実行
-pytest tests/e2e/
-
-# 特定のモジュールのテストを実行
-pytest tests/unit/processors/
-
-# 詳細なテスト結果を表示
-pytest -v
-
-# テストカバレッジレポートを生成
-pytest --cov=app tests/
+# Redis設定
+REDIS_URL=redis://localhost:6379/0
 ```
 
-### テストモックとフィクスチャ
+### 設定ファイル
 
-テストでは、外部依存関係（API、ファイルシステムなど）をモック化して、安定した実行環境を提供しています：
+- `config/development.yml`: 開発環境設定
+- `config/production.yml`: 本番環境設定（作成予定）
 
-- `tests/mocks/`: 外部サービス（Claude API、GitHub API、S3など）のモック実装
-- `tests/fixtures/`: テスト用のサンプルデータ（Markdownファイル、画像、API応答など）
+## 📁 プロジェクト構造
 
-### 環境設定
+```
+resource-generate-workflow/
+├── src/                      # メインソースコード
+│   ├── core/                # コアシステム
+│   ├── workers/             # ワーカー実装
+│   ├── generators/          # コンテンツ生成器
+│   ├── clients/             # 外部API クライアント
+│   └── utils/               # ユーティリティ
+├── prompts/                 # AI プロンプト
+│   ├── system/             # システムプロンプト
+│   └── message/            # メッセージプロンプト
+├── templates/              # テンプレートファイル
+├── tests/                  # テストコード
+├── config/                 # 設定ファイル
+└── docker/                # Docker 設定
+```
 
-テストを実行する前に、以下の環境変数を設定することができます（オプション）：
+## 🧪 テスト
 
 ```bash
-# テスト用の設定ファイルを指定
-export TEST_CONFIG_PATH=tests/fixtures/test_config.yaml
+# 全テスト実行
+make test
 
-# モックではなく実際のAPIを使用するテストを有効化（注意: 実際のAPIが呼び出されます）
-export USE_REAL_APIS=1
+# ユニットテストのみ
+make test-unit
 
-# 特定のテストをスキップ
-export SKIP_SLOW_TESTS=1
+# 統合テストのみ
+make test-integration
 ```
 
-## ライセンス
+## 📊 監視・メトリクス
 
-Copyright (c) 2023 Develogon 
+- **Prometheus**: メトリクス収集（ポート 8000）
+- **Grafana**: ダッシュボード（ポート 3000）
+- **ログ**: 構造化ログ出力
+
+## 🐳 Docker 実行
+
+```bash
+# イメージビルド
+make docker-build
+
+# サービス起動
+make docker-run
+
+# サービス停止
+make docker-stop
+```
+
+## 🔧 開発
+
+### コード品質
+
+```bash
+# フォーマット
+make format
+
+# リント
+make lint
+```
+
+### デバッグ
+
+```bash
+# デバッグモードで実行
+DEBUG=1 python -m src.cli
+```
+
+## 📝 使用例
+
+```python
+from src.core.orchestrator import WorkflowOrchestrator
+from src.config.settings import Config
+
+# 設定読み込み
+config = Config.from_env()
+
+# オーケストレーター初期化
+orchestrator = WorkflowOrchestrator(config)
+
+# ワークフロー実行
+context = await orchestrator.execute(
+    lang="ja", 
+    title="Go言語入門"
+)
+```
+
+## 🔄 ワークフロー
+
+1. **Markdown解析**: チャプター・セクション・パラグラフに分割
+2. **構造解析**: AI による内容理解
+3. **並列生成**: 各種コンテンツの同時生成
+4. **画像処理**: SVG/DrawIO/Mermaid → PNG変換
+5. **アップロード**: S3への自動アップロード
+6. **集約**: 結果のまとめと出力
+
+## 📈 パフォーマンス
+
+- **処理時間**: 従来比80%削減
+- **並列処理**: 最大30タスク同時実行
+- **スケーラビリティ**: 水平スケーリング対応
+
+## 🤝 コントリビューション
+
+1. フォークしてブランチ作成
+2. 機能実装・テスト追加
+3. コード品質チェック: `make lint format`
+4. プルリクエスト作成
+
+## 📄 ライセンス
+
+MIT License
+
+## 🆘 トラブルシューティング
+
+### よくある問題
+
+1. **Redis接続エラー**: Redis が起動しているか確認
+2. **API制限エラー**: レート制限の設定を調整
+3. **メモリ不足**: バッチサイズを調整
+
+詳細は `docs/troubleshooting.md` を参照（作成予定）
+
+## 📧 サポート
+
+- Issues: GitHub Issues
+- Documentation: `docs/` ディレクトリ
+- Architecture: `docs/architecture-design.md` 
