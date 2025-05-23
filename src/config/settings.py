@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from .constants import (
     DEFAULT_API_TIMEOUT,
@@ -125,7 +125,7 @@ class LoggingConfig(BaseModel):
     level: str = DEFAULT_LOG_LEVEL
     format: str = DEFAULT_LOG_FORMAT
     
-    @validator('level')
+    @field_validator('level')
     def validate_log_level(cls, v):
         """ログレベルの検証."""
         valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
